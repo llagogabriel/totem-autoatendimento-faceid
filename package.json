@@ -1,0 +1,21 @@
+{
+  "name": "totem-acesso-root",
+  "version": "1.0.0",
+  "description": "Totem de Acesso com Reconhecimento Facial",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "seed": "cd backend && npm run seed",
+    "start": "npm run dev",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "backend:dev": "cd backend && npm run dev",
+    "backend:start": "cd backend && npm start",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "backend:build": "echo 'Backend não requer build'"
+  },
+  "keywords": ["facial-recognition", "biometria", "acesso"],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

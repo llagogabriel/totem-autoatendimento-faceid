@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DB_PATH=/app/database.db
+      - SIMILARITY_THRESHOLD=99
+      - CORS_ORIGIN=http://localhost:5173
+    volumes:
+      - ./backend/database.db:/app/database.db
+    command: npm start
+    networks:
+      - totem-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/saude"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://backend:3000/api
+    networks:
+      - totem-network
+    depends_on:
+      backend:
+        condition: service_healthy
+
+networks:
+  totem-network:
+    driver: bridge
