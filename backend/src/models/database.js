@@ -52,11 +52,19 @@ export async function initializeDatabase() {
         cpf TEXT UNIQUE NOT NULL,
         nome TEXT NOT NULL,
         foto BLOB NOT NULL,
+        descriptor TEXT,
         status TEXT DEFAULT 'inativo' CHECK(status IN ('ativo', 'inativo')),
         data_atualizacao DATETIME DEFAULT CURRENT_TIMESTAMP,
         criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `)
+
+    const columns = await dbAll(`PRAGMA table_info(pessoas)`)
+    const hasDescriptor = columns.some(col => col.name === 'descriptor')
+    if (!hasDescriptor) {
+      await dbRun('ALTER TABLE pessoas ADD COLUMN descriptor TEXT')
+      console.log('✅ Adicionada coluna descriptor na tabela pessoas')
+    }
 
     await dbRun(`
       CREATE TABLE IF NOT EXISTS logs_acesso (

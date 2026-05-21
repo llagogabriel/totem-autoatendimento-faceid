@@ -39,16 +39,38 @@ export async function buscarFoto(cpf) {
 }
 
 /**
+ * Cadastra uma nova pessoa com foto (dataURL)
+ * body: { cpf, nome, foto }
+ */
+export async function cadastrarPessoa(cpf, nome, fotoDataUrl, descriptor) {
+  try {
+    console.log(`📥 Cadastrando pessoa: ${cpf} - ${nome}`)
+    const response = await apiClient.post('/pessoas', {
+      cpf,
+      nome,
+      foto: fotoDataUrl,
+      descriptor
+    })
+    console.log('✅ Cadastro realizado:', response.data)
+    return response.data
+  } catch (err) {
+    console.error('❌ Erro ao cadastrar pessoa:', err.response?.data || err.message)
+    throw new Error(err.response?.data?.erro || 'Erro ao cadastrar pessoa')
+  }
+}
+
+/**
  * Compara a foto capturada com a do banco
  * Retorna { aprovado, similaridade, threshold, mensagem }
  */
-export async function compararRosto(cpf, fotoCapturaBase64) {
+export async function compararRosto(cpf, fotoCapturaBase64, descriptorCaptura) {
   try {
     console.log(`📊 Comparando rosto para CPF: ${cpf}`)
     
     const response = await apiClient.post('/comparar', {
       cpf,
-      fotoCapturaBase64
+      fotoCapturaBase64,
+      descriptorCaptura
     })
     
     console.log('✅ Comparação realizada:', response.data)
@@ -126,6 +148,7 @@ export default {
   buscarFoto,
   compararRosto,
   autorizarPessoa,
+  cadastrarPessoa,
   revogarPessoa,
   buscarLogs,
   verificarSaude

@@ -19,6 +19,13 @@
         class="absolute inset-0 w-full h-full transform -scale-x-100"
       ></canvas>
 
+      <!-- Guia de alinhamento central -->
+      <div v-if="!processamento.completo && !processamento.erro" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div class="relative border-2 border-blue-400 rounded-3xl w-2/5 h-4/5 opacity-80">
+          <div class="absolute inset-x-0 top-3 text-center text-sm text-blue-200 font-semibold">Alinhe corpo e rosto aqui</div>
+        </div>
+      </div>
+
       <!-- Estado: Carregando IA -->
       <div v-if="processamento.inicializando" class="absolute inset-0 flex items-center justify-center bg-black/90">
         <div class="text-center">
@@ -31,6 +38,13 @@
       <div v-if="processamento.processando && !processamento.completo" class="absolute inset-0 flex items-center justify-center bg-blue-600/20 backdrop-blur-sm">
         <div class="bg-blue-600 px-8 py-4 rounded-2xl font-black text-2xl animate-bounce shadow-2xl">
           IDENTIFICADO!
+        </div>
+      </div>
+
+      <!-- Estado: Capturado (sucesso visual) -->
+      <div v-if="processamento.capturado" class="absolute inset-0 flex items-center justify-center bg-black/70">
+        <div class="text-center bg-white/5 px-8 py-6 rounded-2xl">
+          <p class="text-2xl font-bold text-green-300">{{ processamento.capturadoMensagem }}</p>
         </div>
       </div>
 
@@ -99,6 +113,8 @@ const processamento = ref({
   inicializando: true,
   processando: false,
   comparando: false,
+  capturado: false,
+  capturadoMensagem: '',
   completo: false,
   erro: false,
   erroTitulo: '',
@@ -107,15 +123,25 @@ const processamento = ref({
   resultado: { aprovado: false, similaridade: 0 }
 })
 
+const ALINHAMENTO_MIN_MS = 3000
+const ALINHAMENTO_TOLERANCE_X = 0.30
+const ALINHAMENTO_TOLERANCE_Y = 0.10
 let stream = null
 let intervalId = null
 let fotoCapturaBase64 = null
+let alinhamentoTempo = 0
+let ultimoTempo = null
+let faceAligned = false
 
 const obterMensagem = () => {
   if (processamento.value.inicializando) return 'Inicializando câmera e modelo de IA...'
   if (processamento.value.processando) return 'Rosto detectado! Capturando...'
   if (processamento.value.comparando) return 'Comparando características faciais...'
-  return 'Posicione seu rosto frente à câmera'
+  if (faceAligned && alinhamentoTempo < ALINHAMENTO_MIN_MS) {
+    const remaining = Math.max(0, ALINHAMENTO_MIN_MS - alinhamentoTempo)
+    return `Mantenha seu rosto alinhado à área vertical por mais ${Math.ceil(remaining / 1000)}s`
+  }
+  return 'Alinhe seu corpo e rosto à área vertical central para iniciar a captura'
 }
 
 onMounted(async () => {
@@ -128,9 +154,11 @@ onMounted(async () => {
 
     const MODEL_URL = '/models'
     
-    // Carregar modelo de IA
+    // Carregar modelos de IA do face-api.js
     console.log('📦 Carregando modelos...')
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL)
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
     
     // Solicitar acesso à câmera
     console.log('📷 Acessando câmera...')
@@ -175,14 +203,21 @@ const iniciarDeteccao = () => {
       if (detection) {
         const resizedDetection = faceapi.resizeResults(detection, displaySize)
         faceapi.draw.drawDetections(canvas, resizedDetection)
-        
-        // Capturar foto quando detectar rosto
-        await capturarEComparar()
+
+        const aligned = isFaceAligned(resizedDetection, displaySize)
+        updateAlignmentTime(aligned)
+
+        if (aligned && alinhamentoTempo >= ALINHAMENTO_MIN_MS) {
+          await capturarEComparar()
+        }
+      } else {
+        resetAlignment()
       }
     } catch (err) {
       console.error('Erro na detecção:', err)
+      resetAlignment()
     }
-  }, 150)
+  }, 100)
 }
 
 const capturarEComparar = async () => {
@@ -195,31 +230,53 @@ const capturarEComparar = async () => {
     clearInterval(intervalId)
     if (stream) stream.getTracks().forEach(t => t.stop())
 
-    // Capturar a foto do vídeo em base64
-    const canvas = canvasRef.value
-    fotoCapturaBase64 = canvas.toDataURL('image/jpeg')
+    const video = videoRef.value
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptor()
 
-    // Aguardar um pouco para UX
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    if (!detection || !detection.descriptor) {
+      throw new Error('Não foi possível extrair o rosto. Tente novamente com melhor iluminação.')
+    }
+
+    const descriptorCaptura = Array.from(detection.descriptor)
+
+    // Capturar a foto do vídeo em base64 para registro ou fallback
+    const captureCanvas = document.createElement('canvas')
+    captureCanvas.width = video.videoWidth
+    captureCanvas.height = video.videoHeight
+    const captureCtx = captureCanvas.getContext('2d')
+    captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height)
+    fotoCapturaBase64 = captureCanvas.toDataURL('image/jpeg')
+
+    // Garantir pelo menos 2 segundos de exibição da captura
+    processamento.value.capturado = true
+    processamento.value.capturadoMensagem = 'Capturado com sucesso'
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    processamento.value.capturadoMensagem = 'Processando...'
+    await new Promise(resolve => setTimeout(resolve, 2000))
 
     processamento.value.processando = false
+    processamento.value.capturado = false
     processamento.value.comparando = true
-    processamento.value.mensagem = 'Extracting facial features...'
+    processamento.value.mensagem = 'Comparando características faciais...'
 
     // Comparar com backend
     const cpf = sessionStorage.getItem('cpf_atual')
-    const resultado = await api.compararRosto(cpf, fotoCapturaBase64)
+    const resultado = await api.compararRosto(cpf, fotoCapturaBase64, descriptorCaptura)
 
     processamento.value.resultado = resultado
 
     if (resultado.aprovado) {
       processamento.value.comparando = false
-      
+
       // Autorizar acesso
       await api.autorizarPessoa(cpf)
-      
+
       processamento.value.completo = true
-      
+
       // Redirecionar após 3 segundos
       setTimeout(() => {
         sessionStorage.removeItem('cpf_atual')
@@ -240,6 +297,41 @@ const capturarEComparar = async () => {
     processamento.value.erroTitulo = 'Erro no Processamento'
     processamento.value.erroMensagem = err.message
   }
+}
+
+const isFaceAligned = (detection, displaySize) => {
+  const centerX = detection.box.x + detection.box.width / 2
+  const centerY = detection.box.y + detection.box.height / 2
+  const targetMinX = displaySize.width * ALINHAMENTO_TOLERANCE_X
+  const targetMaxX = displaySize.width * (1 - ALINHAMENTO_TOLERANCE_X)
+  const targetMinY = displaySize.height * ALINHAMENTO_TOLERANCE_Y
+  const targetMaxY = displaySize.height * (1 - ALINHAMENTO_TOLERANCE_Y)
+  return centerX >= targetMinX && centerX <= targetMaxX && centerY >= targetMinY && centerY <= targetMaxY
+}
+
+const updateAlignmentTime = (aligned) => {
+  const now = Date.now()
+  if (aligned) {
+    if (!faceAligned) {
+      faceAligned = true
+      ultimoTempo = now
+      alinhamentoTempo = 0
+      processamento.value.capturado = false
+      processamento.value.capturadoMensagem = ''
+    } else {
+      const delta = now - (ultimoTempo || now)
+      alinhamentoTempo += delta
+      ultimoTempo = now
+    }
+  } else {
+    resetAlignment()
+  }
+}
+
+const resetAlignment = () => {
+  faceAligned = false
+  alinhamentoTempo = 0
+  ultimoTempo = null
 }
 
 const reiniciar = () => {

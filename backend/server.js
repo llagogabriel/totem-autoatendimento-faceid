@@ -7,7 +7,10 @@ import { logRequests, handleErrors } from './src/middleware/errorHandler.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173'
+const rawCorsOrigin = process.env.CORS_ORIGIN || ''
+const CORS_ORIGIN = rawCorsOrigin
+  ? rawCorsOrigin.split(',').map(origin => origin.trim())
+  : true
 
 // Middlewares globais
 app.use(cors({
@@ -54,7 +57,7 @@ async function start() {
     // Iniciar servidor
     app.listen(PORT, () => {
       console.log(`\n🚀 Servidor rodando em http://localhost:${PORT}`)
-      console.log(`📍 CORS permitido para: ${CORS_ORIGIN}`)
+      console.log(`📍 CORS permitido para: ${rawCorsOrigin || '* (todos)'}`)
       console.log(`📊 Threshold de similaridade: ${process.env.SIMILARITY_THRESHOLD || 99}%`)
       console.log('\n💡 Endpoints disponíveis:')
       console.log('   GET  /api/saude')

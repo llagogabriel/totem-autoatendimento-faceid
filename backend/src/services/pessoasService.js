@@ -7,7 +7,7 @@ import { compararRostos, saoRostosIguais } from './faceRecognition.js'
 export async function buscarPorCPF(cpf) {
   try {
     const pessoa = await dbGet(
-      'SELECT id, cpf, nome, foto, status FROM pessoas WHERE cpf = ?',
+      'SELECT id, cpf, nome, foto, descriptor, status FROM pessoas WHERE cpf = ?',
       [cpf]
     )
     return pessoa
@@ -35,12 +35,12 @@ export async function listarTodas() {
 /**
  * Cadastra uma nova pessoa
  */
-export async function cadastrar(cpf, nome, fotoBase64) {
+export async function cadastrar(cpf, nome, fotoBase64, descriptor) {
   try {
     await dbRun(
-      `INSERT INTO pessoas (cpf, nome, foto, status) 
-       VALUES (?, ?, ?, 'inativo')`,
-      [cpf, nome, fotoBase64]
+      `INSERT INTO pessoas (cpf, nome, foto, descriptor, status) 
+       VALUES (?, ?, ?, ?, 'inativo')`,
+      [cpf, nome, fotoBase64, JSON.stringify(descriptor)]
     )
     console.log(`✅ Pessoa cadastrada: ${nome} (${cpf})`)
     return { cpf, nome, status: 'inativo' }
@@ -57,15 +57,20 @@ export async function cadastrar(cpf, nome, fotoBase64) {
  * Compara foto capturada com foto no BD
  * Retorna similaridade e se passou no threshold
  */
-export async function compararFoto(cpf, fotoCapturaBase64, threshold = 99) {
+export async function compararFoto(cpf, descriptorCaptura, threshold = 70) {
   try {
     const pessoa = await buscarPorCPF(cpf)
     if (!pessoa) {
       throw new Error('Pessoa não encontrada')
     }
 
+    if (!pessoa.descriptor) {
+      throw new Error('Pessoa não possui descriptor facial cadastrado')
+    }
+
+    const descriptorArmazenado = JSON.parse(pessoa.descriptor)
     console.log(`\n🔄 Comparando rosto para CPF: ${cpf}`)
-    const similaridade = await compararRostos(pessoa.foto, fotoCapturaBase64)
+    const similaridade = await compararRostos(descriptorArmazenado, descriptorCaptura)
     const passou = saoRostosIguais(similaridade, threshold)
 
     // Log de acesso

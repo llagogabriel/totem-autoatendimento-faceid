@@ -58,17 +58,40 @@ router.get('/pessoas/:cpf/foto', async (req, res) => {
 })
 
 /**
+ * POST /api/pessoas
+ * Cadastra uma nova pessoa
+ * Body: { cpf, nome, foto }
+ */
+router.post('/pessoas', async (req, res) => {
+  try {
+    const { cpf, nome, foto, descriptor } = req.body
+
+    if (!cpf || !nome || !foto || !descriptor) {
+      return res.status(400).json({ erro: 'cpf, nome, foto e descriptor são obrigatórios' })
+    }
+
+    console.log(`\n📍 POST /api/pessoas - Cadastrando ${cpf}`)
+
+    const resultado = await pessoasService.cadastrar(cpf, nome, foto, descriptor)
+    res.status(201).json({ mensagem: 'Pessoa cadastrada', pessoa: resultado })
+  } catch (err) {
+    console.error('Erro ao cadastrar pessoa:', err)
+    res.status(400).json({ erro: err.message || 'Erro ao cadastrar pessoa' })
+  }
+})
+
+/**
  * POST /api/comparar
- * Compara foto capturada com foto no banco
- * Body: { cpf, fotoCapturaBase64 }
+ * Compara descritor capturado com descritor cadastrado no banco
+ * Body: { cpf, fotoCapturaBase64, descriptorCaptura }
  */
 router.post('/comparar', async (req, res) => {
   try {
-    const { cpf, fotoCapturaBase64 } = req.body
+    const { cpf, fotoCapturaBase64, descriptorCaptura } = req.body
 
-    if (!cpf || !fotoCapturaBase64) {
+    if (!cpf || !fotoCapturaBase64 || !descriptorCaptura) {
       return res.status(400).json({
-        erro: 'CPF e fotoCapturaBase64 são obrigatórios'
+        erro: 'cpf, fotoCapturaBase64 e descriptorCaptura são obrigatórios'
       })
     }
 
@@ -76,13 +99,11 @@ router.post('/comparar', async (req, res) => {
 
     const resultado = await pessoasService.compararFoto(
       cpf,
-      fotoCapturaBase64,
-      parseInt(process.env.SIMILARITY_THRESHOLD || 99)
+      descriptorCaptura,
+      parseInt(process.env.SIMILARITY_THRESHOLD || 70)
     )
 
-    // Retornar com status apropriado
-    const statusCode = resultado.aprovado ? 200 : 200 // Mesmo assim retorna 200, mas com aprovado:false
-    res.status(statusCode).json(resultado)
+    res.status(200).json(resultado)
   } catch (err) {
     console.error('Erro:', err)
     res.status(400).json({
