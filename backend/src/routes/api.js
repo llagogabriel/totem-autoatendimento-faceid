@@ -66,7 +66,26 @@ router.post('/pessoas', async (req, res) => {
   try {
     const { cpf, nome, foto, descriptor } = req.body
 
+    // Log incoming request summary for debugging network/size issues
+    console.log(`\n📍 POST /api/pessoas - recebendo cadastro`)
+    console.log('Headers:', {
+      host: req.headers.host,
+      origin: req.headers.origin,
+      'content-type': req.headers['content-type'],
+      'content-length': req.headers['content-length']
+    })
+
+    const fotoLen = typeof foto === 'string' ? foto.length : 0
+    const descriptorLen = Array.isArray(descriptor) ? descriptor.length : (descriptor ? String(descriptor).length : 0)
+    console.log(`Payload sizes -> foto: ${fotoLen} chars, descriptor: ${descriptorLen}`)
+
     if (!cpf || !nome || !foto || !descriptor) {
+      console.warn('⚠️ Dados obrigatórios faltando no body:', {
+        cpf: !!cpf,
+        nome: !!nome,
+        foto: !!foto,
+        descriptor: !!descriptor
+      })
       return res.status(400).json({ erro: 'cpf, nome, foto e descriptor são obrigatórios' })
     }
 

@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const defaultHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
+const defaultProtocol = typeof window !== 'undefined' ? window.location.protocol : 'http:'
+const BASE_URL = import.meta.env.VITE_API_URL || `${defaultProtocol}//${defaultHost}:3000/api`
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -55,7 +57,9 @@ export async function cadastrarPessoa(cpf, nome, fotoDataUrl, descriptor) {
     return response.data
   } catch (err) {
     console.error('❌ Erro ao cadastrar pessoa:', err.response?.data || err.message)
-    throw new Error(err.response?.data?.erro || 'Erro ao cadastrar pessoa')
+    const serverError = err.response?.data?.erro || err.response?.data || null
+    const message = serverError ? (typeof serverError === 'string' ? serverError : JSON.stringify(serverError)) : err.message || 'Erro ao cadastrar pessoa'
+    throw new Error(message)
   }
 }
 

@@ -8,9 +8,11 @@ import { logRequests, handleErrors } from './src/middleware/errorHandler.js'
 const app = express()
 const PORT = process.env.PORT || 3000
 const rawCorsOrigin = process.env.CORS_ORIGIN || ''
-const CORS_ORIGIN = rawCorsOrigin
-  ? rawCorsOrigin.split(',').map(origin => origin.trim())
-  : true
+const CORS_ORIGIN = rawCorsOrigin === '*'
+  ? true
+  : rawCorsOrigin
+    ? rawCorsOrigin.split(',').map(origin => origin.trim())
+    : true
 
 // Middlewares globais
 app.use(cors({

@@ -15,12 +15,34 @@
       </div>
 
       <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">Foto (jpg, jpeg, png)</label>
-        <input ref="fileRef" @change="onFileChange" accept="image/jpeg,image/jpg,image/png" type="file" class="w-full mt-1" />
+        <label class="block text-sm font-medium text-gray-700">Foto (arquivo ou webcam)</label>
+        <div class="flex gap-3 mt-2">
+          <button @click="$refs.fileRef.click()" type="button" class="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded">Adicionar foto</button>
+          <button @click="openCamera" type="button" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded">Usar webcam</button>
+        </div>
+
+        <input ref="fileRef" @change="onFileChange" accept="image/*" capture="environment" type="file" class="hidden mt-1" />
+
         <div v-if="preview" class="mt-3">
           <img :src="preview" alt="preview" class="w-48 h-48 object-cover rounded" />
         </div>
       </div>
+
+      <div v-if="cameraActive.value" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div class="bg-white rounded-3xl p-4 w-full max-w-2xl">
+          <div class="relative overflow-hidden rounded-3xl border border-slate-200 bg-black">
+            <video ref="cameraVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+            <canvas ref="cameraCanvas" class="hidden"></canvas>
+          </div>
+          <div class="mt-4 flex gap-3">
+            <button @click="captureFromCamera" class="flex-1 bg-green-600 text-white px-4 py-3 rounded-xl">Capturar</button>
+            <button @click="closeCamera" class="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-xl">Fechar</button>
+          </div>
+          <p class="mt-3 text-sm text-slate-500">Se seu navegador pedir permissão, confirme para usar a webcam.</p>
+        </div>
+      </div>
+
+      
 
       <div class="flex gap-3">
         <button @click="submit" :disabled="carregando" class="bg-blue-600 text-white px-4 py-2 rounded">{{ carregando ? 'Enviando...' : 'Cadastrar' }}</button>
@@ -35,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import * as faceapi from 'face-api.js'
 import * as api from '../services/api.js'
 
@@ -46,6 +68,10 @@ const preview = ref(null)
 const carregando = ref(false)
 const mensagem = ref('')
 const mensagemTipo = ref('')
+const cameraActive = ref(false)
+const cameraStream = ref(null)
+const cameraVideo = ref(null)
+const cameraCanvas = ref(null)
 
 const MODEL_URL = '/models'
 let modelosCarregados = false
@@ -90,6 +116,56 @@ function onFileChange(e) {
   }
   reader.readAsDataURL(f)
 }
+
+const openCamera = async () => {
+  cameraActive.value = true
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user' },
+      audio: false
+    })
+    cameraStream.value = stream
+    await nextTick()
+    if (cameraVideo.value) {
+      cameraVideo.value.srcObject = stream
+      await cameraVideo.value.play()
+    }
+  } catch (err) {
+    cameraActive.value = false
+    console.error('Erro ao abrir webcam:', err)
+    mensagemTipo.value = 'erro'
+    mensagem.value = 'Não foi possível acessar a webcam. Verifique as permissões do navegador.'
+  }
+}
+
+const closeCamera = () => {
+  cameraActive.value = false
+  if (cameraStream.value) {
+    cameraStream.value.getTracks().forEach(track => track.stop())
+    cameraStream.value = null
+  }
+  if (cameraVideo.value) {
+    cameraVideo.value.srcObject = null
+  }
+}
+
+const captureFromCamera = () => {
+  if (!cameraVideo.value || !cameraCanvas.value) {
+    mensagemTipo.value = 'erro'
+    mensagem.value = 'Webcam não está pronta. Tente novamente.'
+    return
+  }
+
+  const video = cameraVideo.value
+  const canvas = cameraCanvas.value
+  canvas.width = video.videoWidth || 640
+  canvas.height = video.videoHeight || 480
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+  preview.value = canvas.toDataURL('image/jpeg', 0.9)
+  closeCamera()
+}
+
 
 async function extractFaceDescriptor(imageDataUrl) {
   const image = new Image()
@@ -140,6 +216,9 @@ async function submit() {
   carregando.value = true
   try {
     const descriptor = await extractFaceDescriptor(preview.value)
+    console.log('Preparando cadastro — cpf:', formatCpfDigits(digits), 'nome:', nome.value.trim())
+    console.log('Preview length:', preview.value?.length)
+    console.log('Descriptor length:', descriptor.length, 'sample:', descriptor.slice(0,5))
     const formatted = formatCpfDigits(digits)
     await api.cadastrarPessoa(formatted, nome.value.trim(), preview.value, descriptor)
     mensagemTipo.value = 'sucesso'

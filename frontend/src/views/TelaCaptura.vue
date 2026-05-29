@@ -6,7 +6,7 @@
     
     <div class="relative w-full max-w-2xl aspect-video bg-black rounded-3xl overflow-hidden border-4 border-blue-600 shadow-2xl shadow-blue-500/20">
       <video 
-        v-show="!processamento.completo && !processamento.erro"
+        v-show="!processamento.completo && !processamento.erro && cameraSupported"
         ref="videoRef" 
         autoplay 
         muted 
@@ -14,16 +14,39 @@
         class="w-full h-full object-cover transform -scale-x-100"
       ></video>
       <canvas 
-        v-show="!processamento.completo && !processamento.erro"
+        v-show="!processamento.completo && !processamento.erro && cameraSupported"
         ref="canvasRef" 
         class="absolute inset-0 w-full h-full transform -scale-x-100"
       ></canvas>
 
       <!-- Guia de alinhamento central -->
-      <div v-if="!processamento.completo && !processamento.erro" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div v-if="!processamento.completo && !processamento.erro && cameraSupported" class="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div class="relative border-2 border-blue-400 rounded-3xl w-2/5 h-4/5 opacity-80">
           <div class="absolute inset-x-0 top-3 text-center text-sm text-blue-200 font-semibold">Alinhe corpo e rosto aqui</div>
         </div>
+      </div>
+
+      <div v-if="!cameraSupported.value && !processamento.completo && !processamento.erro" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 p-6 text-center">
+        <p class="mb-4 text-lg font-semibold text-blue-200">Seu dispositivo não permitiu acesso direto à câmera.</p>
+        <p class="mb-6 text-sm text-gray-300">Use uma foto capturada pela câmera do celular para fazer a validação.</p>
+        <input
+          ref="fallbackFileRef"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          @change="onFallbackFileChange"
+          class="mb-4 w-full rounded-lg border border-blue-500 bg-slate-900 px-3 py-3 text-white"
+        />
+        <div v-if="fallbackPreview" class="mb-4 w-full">
+          <img :src="fallbackPreview" alt="Preview da foto" class="mx-auto max-h-64 w-auto rounded-2xl border border-blue-500 object-contain" />
+        </div>
+        <button
+          @click="processFallbackImage"
+          :disabled="!fallbackPreview || processamento.processando || processamento.comparando"
+          class="bg-blue-600 disabled:bg-gray-500 text-white px-6 py-3 rounded-xl font-bold"
+        >
+          {{ processamento.processando ? 'Processando...' : 'Comparar Foto' }}
+        </button>
       </div>
 
       <!-- Estado: Carregando IA -->
@@ -108,6 +131,8 @@ import * as api from '../services/api.js'
 const router = useRouter()
 const videoRef = ref(null)
 const canvasRef = ref(null)
+const fallbackPreview = ref(null)
+const cameraSupported = ref(true)
 
 const processamento = ref({
   inicializando: true,
@@ -132,8 +157,10 @@ let fotoCapturaBase64 = null
 let alinhamentoTempo = 0
 let ultimoTempo = null
 let faceAligned = false
+let fallbackFile = null
 
 const obterMensagem = () => {
+  if (!cameraSupported.value) return 'Seu dispositivo não permite acesso direto à câmera. Use a foto abaixo.'
   if (processamento.value.inicializando) return 'Inicializando câmera e modelo de IA...'
   if (processamento.value.processando) return 'Rosto detectado! Capturando...'
   if (processamento.value.comparando) return 'Comparando características faciais...'
@@ -174,11 +201,9 @@ onMounted(async () => {
       }
     }
   } catch (err) {
-    console.error('❌ Erro ao inicializar:', err)
+    console.warn('⚠️ Não foi possível iniciar a câmera diretamente:', err)
+    cameraSupported.value = false
     processamento.value.inicializando = false
-    processamento.value.erro = true
-    processamento.value.erroTitulo = 'Erro ao Inicializar'
-    processamento.value.erroMensagem = err.message
   }
 })
 
@@ -325,6 +350,86 @@ const updateAlignmentTime = (aligned) => {
     }
   } else {
     resetAlignment()
+  }
+}
+
+const extractFaceDescriptor = async (imageDataUrl) => {
+  const image = new Image()
+  image.src = imageDataUrl
+
+  await new Promise((resolve, reject) => {
+    image.onload = resolve
+    image.onerror = reject
+  })
+
+  const detection = await faceapi
+    .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor()
+
+  if (!detection || !detection.descriptor) {
+    throw new Error('Não foi possível extrair o rosto da imagem. Use outra foto mais nítida.')
+  }
+
+  return Array.from(detection.descriptor)
+}
+
+const onFallbackFileChange = (event) => {
+  const file = event.target.files && event.target.files[0]
+  if (!file) return
+  fallbackFile = file
+  const reader = new FileReader()
+  reader.onload = () => {
+    fallbackPreview.value = reader.result
+  }
+  reader.readAsDataURL(file)
+}
+
+const processFallbackImage = async () => {
+  if (!fallbackPreview.value || processamento.value.processando || processamento.value.comparando) return
+
+  processamento.value.processando = true
+  processamento.value.capturado = true
+  processamento.value.capturadoMensagem = 'Processando imagem...'
+
+  try {
+    const descriptorCaptura = await extractFaceDescriptor(fallbackPreview.value)
+    const fotoCaptura = fallbackPreview.value
+
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    processamento.value.processando = false
+    processamento.value.capturado = false
+    processamento.value.comparando = true
+    processamento.value.mensagem = 'Comparando características faciais...'
+
+    const cpf = sessionStorage.getItem('cpf_atual')
+    const resultado = await api.compararRosto(cpf, fotoCaptura, descriptorCaptura)
+
+    processamento.value.resultado = resultado
+
+    if (resultado.aprovado) {
+      processamento.value.comparando = false
+      await api.autorizarPessoa(cpf)
+      processamento.value.completo = true
+
+      setTimeout(() => {
+        sessionStorage.removeItem('cpf_atual')
+        router.push('/')
+      }, 3000)
+    } else {
+      processamento.value.comparando = false
+      processamento.value.erro = true
+      processamento.value.erroTitulo = 'Falha na Autenticação'
+      processamento.value.erroMensagem = `Similaridade insuficiente: ${resultado.similaridade.toFixed(2)}% (mínimo: ${resultado.threshold}%)`
+    }
+  } catch (err) {
+    console.error('❌ Erro ao processar foto de fallback:', err)
+    processamento.value.processando = false
+    processamento.value.comparando = false
+    processamento.value.erro = true
+    processamento.value.erroTitulo = 'Erro no Processamento'
+    processamento.value.erroMensagem = err.message
   }
 }
 
