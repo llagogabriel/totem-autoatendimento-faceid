@@ -1,4 +1,4 @@
-# 🎭 Totem de Acesso - Reconhecimento Facial
+#  Totem de Acesso - Reconhecimento Facial
 
 Sistema profissional de reconhecimento de pessoas e autorização de acesso usando visão computacional e comparação biométrica.
 
