@@ -28,23 +28,49 @@
         </div>
       </div>
 
-      <div v-if="cameraActive.value" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-        <div class="bg-white rounded-3xl p-4 w-full max-w-2xl">
-          <div class="relative overflow-hidden rounded-3xl border border-slate-200 bg-black">
-            <video ref="cameraVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+      <div v-if="cameraActive" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-85 p-4">
+        <div class="relative w-full max-w-lg overflow-hidden rounded-2xl bg-slate-900 p-6 shadow-2xl border border-slate-800">
+          
+          <div class="mb-4 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-white">Posicione o Rosto</h3>
+            <button @click="closeCamera" type="button" class="text-slate-400 hover:text-white transition-colors">
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
+            <video ref="cameraVideo" autoplay muted playsinline class="h-full w-full object-cover scale-x-[-1]"></video>
             <canvas ref="cameraCanvas" class="hidden"></canvas>
+            
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div class="w-56 h-56 border-4 border-dashed border-blue-500 rounded-full bg-opacity-0 shadow-[0_0_0_9999px_rgba(15,23,42,0.65)]"></div>
+            </div>
+            
+            <div class="absolute bottom-4 left-0 right-0 text-center pointer-events-none">
+              <span class="bg-blue-600 bg-opacity-90 text-white text-xs px-3 py-1.5 rounded-full font-medium tracking-wide shadow">
+                Centralize seu rosto no círculo
+              </span>
+            </div>
           </div>
-          <div class="mt-4 flex gap-3">
-            <button @click="captureFromCamera" class="flex-1 bg-green-600 text-white px-4 py-3 rounded-xl">Capturar</button>
-            <button @click="closeCamera" class="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-xl">Fechar</button>
+
+          <div class="mt-6 flex justify-end space-x-3">
+            <button @click="closeCamera" type="button" class="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors">
+              Cancelar
+            </button>
+            <button @click="captureFromCamera" type="button" class="flex items-center justify-center space-x-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 shadow-lg shadow-blue-600/20 active:scale-95 transition-all">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>Capturar Foto</span>
+            </button>
           </div>
-          <p class="mt-3 text-sm text-slate-500">Se seu navegador pedir permissão, confirme para usar a webcam.</p>
         </div>
       </div>
 
-      
-
-      <div class="flex gap-3">
+      <div class="flex gap-3 mt-6">
         <button @click="submit" :disabled="carregando" class="bg-blue-600 text-white px-4 py-2 rounded">{{ carregando ? 'Enviando...' : 'Cadastrar' }}</button>
         <button @click="$router.push('/')" class="bg-gray-200 px-4 py-2 rounded">Voltar</button>
       </div>
@@ -61,6 +87,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import * as faceapi from 'face-api.js'
 import * as api from '../services/api.js'
 
+// --- Estados do Formulário e Controle ---
 const cpf = ref('')
 const nome = ref('')
 const fileRef = ref(null)
@@ -68,6 +95,8 @@ const preview = ref(null)
 const carregando = ref(false)
 const mensagem = ref('')
 const mensagemTipo = ref('')
+
+// --- Estados do Modal de Câmera Biométrica ---
 const cameraActive = ref(false)
 const cameraStream = ref(null)
 const cameraVideo = ref(null)
@@ -76,6 +105,7 @@ const cameraCanvas = ref(null)
 const MODEL_URL = '/models'
 let modelosCarregados = false
 
+// --- Carga Inicial dos Modelos da face-api.js ---
 onMounted(async () => {
   try {
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL)
@@ -87,6 +117,7 @@ onMounted(async () => {
   }
 })
 
+// --- Máscara e Validação de CPF ---
 function formatCpfDigits(digits) {
   const d = digits || ''
   const part1 = d.slice(0,3)
@@ -107,6 +138,7 @@ function onCpfInput(e) {
   cpf.value = formatCpfDigits(digits)
 }
 
+// --- Upload de Arquivo Local ---
 function onFileChange(e) {
   const f = e.target.files && e.target.files[0]
   if (!f) return
@@ -117,15 +149,22 @@ function onFileChange(e) {
   reader.readAsDataURL(f)
 }
 
+// --- Controle de Fluxo da Webcam (Modificado para o Novo Modal) ---
 const openCamera = async () => {
+  mensagem.value = ''
+  mensagemTipo.value = ''
   cameraActive.value = true
+  
+  // Força o Vue a renderizar o modal HTML antes de injetar o stream no <video>
+  await nextTick()
+  
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user' },
+      video: { width: 1280, height: 720, facingMode: 'user' },
       audio: false
     })
     cameraStream.value = stream
-    await nextTick()
+    
     if (cameraVideo.value) {
       cameraVideo.value.srcObject = stream
       await cameraVideo.value.play()
@@ -141,6 +180,7 @@ const openCamera = async () => {
 const closeCamera = () => {
   cameraActive.value = false
   if (cameraStream.value) {
+    // Corta a energia do hardware da câmera imediatamente
     cameraStream.value.getTracks().forEach(track => track.stop())
     cameraStream.value = null
   }
@@ -149,6 +189,7 @@ const closeCamera = () => {
   }
 }
 
+// --- Captura de Foto com Correção de Espelho ---
 const captureFromCamera = () => {
   if (!cameraVideo.value || !cameraCanvas.value) {
     mensagemTipo.value = 'erro'
@@ -158,15 +199,26 @@ const captureFromCamera = () => {
 
   const video = cameraVideo.value
   const canvas = cameraCanvas.value
-  canvas.width = video.videoWidth || 640
-  canvas.height = video.videoHeight || 480
+  
+  // Define dimensões limpas em HD com base no stream real capturado
+  canvas.width = video.videoWidth || 1280
+  canvas.height = video.videoHeight || 720
+  
   const ctx = canvas.getContext('2d')
+
+  // Mágica do Espelhamento: Inverte o Canvas horizontalmente para a foto
+  // ser salva idêntica ao que a pessoa vê na tela do totem
+  ctx.translate(canvas.width, 0)
+  ctx.scale(-1, 1)
+  
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-  preview.value = canvas.toDataURL('image/jpeg', 0.9)
+  
+  // Exporta em alta definição
+  preview.value = canvas.toDataURL('image/jpeg', 0.95)
   closeCamera()
 }
 
-
+// --- Processamento de IA e Envio para o Backend ---
 async function extractFaceDescriptor(imageDataUrl) {
   const image = new Image()
   image.src = imageDataUrl
@@ -182,7 +234,7 @@ async function extractFaceDescriptor(imageDataUrl) {
     .withFaceDescriptor()
 
   if (!detection || !detection.descriptor) {
-    throw new Error('Não foi possível detectar um rosto na foto. Use outra imagem mais nítida.')
+    throw new Error('Não foi possível detectar um rosto na foto. Posicione-se melhor e use uma imagem mais nítida.')
   }
 
   return Array.from(detection.descriptor)
@@ -192,6 +244,7 @@ async function submit() {
   mensagem.value = ''
   mensagemTipo.value = ''
   const digits = cpf.value.replace(/\D/g, '')
+  
   if (digits.length !== 11) {
     mensagemTipo.value = 'erro'
     mensagem.value = 'CPF inválido. Informe 11 dígitos.'
@@ -204,26 +257,26 @@ async function submit() {
   }
   if (!preview.value) {
     mensagemTipo.value = 'erro'
-    mensagem.value = 'Selecione uma foto (jpg/png).'
+    mensagem.value = 'Selecione uma foto (jpg/png) ou use a webcam.'
     return
   }
   if (!modelosCarregados) {
     mensagemTipo.value = 'erro'
-    mensagem.value = 'Modelos de IA ainda não foram carregados. Aguarde alguns segundos e tente novamente.'
+    mensagem.value = 'Modelos de IA ainda estão sendo carregados. Aguarde alguns segundos.'
     return
   }
 
   carregando.value = true
   try {
     const descriptor = await extractFaceDescriptor(preview.value)
-    console.log('Preparando cadastro — cpf:', formatCpfDigits(digits), 'nome:', nome.value.trim())
-    console.log('Preview length:', preview.value?.length)
-    console.log('Descriptor length:', descriptor.length, 'sample:', descriptor.slice(0,5))
     const formatted = formatCpfDigits(digits)
+    
     await api.cadastrarPessoa(formatted, nome.value.trim(), preview.value, descriptor)
+    
     mensagemTipo.value = 'sucesso'
     mensagem.value = 'Cadastro realizado com sucesso.'
-    // limpar form
+    
+    // Reseta o formulário pós-sucesso
     cpf.value = ''
     nome.value = ''
     preview.value = null
