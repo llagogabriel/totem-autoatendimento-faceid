@@ -104,6 +104,11 @@ router.post('/pessoas', async (req, res) => {
  * Compara descritor capturado com descritor cadastrado no banco
  * Body: { cpf, fotoCapturaBase64, descriptorCaptura }
  */
+/**
+ * POST /api/comparar
+ * Compara descritor capturado com descritor cadastrado no banco
+ * Body: { cpf, fotoCapturaBase64, descriptorCaptura }
+ */
 router.post('/comparar', async (req, res) => {
   try {
     const { cpf, fotoCapturaBase64, descriptorCaptura } = req.body
@@ -116,15 +121,15 @@ router.post('/comparar', async (req, res) => {
 
     console.log(`\n📍 POST /api/comparar - CPF: ${cpf}`)
 
+    // CORREÇÃO DE POSIÇÃO: Enviamos exatamente os parâmetros que o pessoasService espera receber
     const resultado = await pessoasService.compararFoto(
       cpf,
-      descriptorCaptura,
-      parseInt(process.env.SIMILARITY_THRESHOLD || 70)
+      descriptorCaptura
     )
 
     res.status(200).json(resultado)
   } catch (err) {
-    console.error('Erro:', err)
+    console.error('Erro na rota /comparar:', err)
     res.status(400).json({
       erro: err.message || 'Erro ao comparar rostos'
     })

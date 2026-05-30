@@ -1,4 +1,5 @@
 import { dbRun, dbGet, dbAll } from '../models/database.js'
+// IMPORTAÇÃO CORRIGIDA: Pegando as funções reais com os nomes exatos do seu faceRecognition.js
 import { compararRostos, saoRostosIguais } from './faceRecognition.js'
 
 /**
@@ -6,11 +7,11 @@ import { compararRostos, saoRostosIguais } from './faceRecognition.js'
  */
 export async function buscarPorCPF(cpf) {
   try {
-    const pessoa = await dbGet(
+    const p = await dbGet(
       'SELECT id, cpf, nome, foto, descriptor, status FROM pessoas WHERE cpf = ?',
       [cpf]
     )
-    return pessoa
+    return p
   } catch (err) {
     console.error('Erro ao buscar pessoa:', err)
     throw err
@@ -42,7 +43,7 @@ export async function cadastrar(cpf, nome, fotoBase64, descriptor) {
        VALUES (?, ?, ?, ?, 'inativo')`,
       [cpf, nome, fotoBase64, JSON.stringify(descriptor)]
     )
-    console.log(`✅ Pessoa cadastrada: ${nome} (${cpf})`)
+    console.log(`✅ Pessoa cadastrada com IA: ${nome} (${cpf})`)
     return { cpf, nome, status: 'inativo' }
   } catch (err) {
     if (err.message.includes('UNIQUE')) {
@@ -54,41 +55,50 @@ export async function cadastrar(cpf, nome, fotoBase64, descriptor) {
 }
 
 /**
- * Compara foto capturada com foto no BD
- * Retorna similaridade e se passou no threshold
+ * Compara foto capturada com o descritor facial salvo no banco
+ * Retorna similaridade real baseada em Distância Euclidiana
  */
-export async function compararFoto(cpf, descriptorCaptura, threshold = 70) {
+export async function compararFoto(cpf, descriptorCaptura) {
   try {
     const pessoa = await buscarPorCPF(cpf)
     if (!pessoa) {
       throw new Error('Pessoa não encontrada')
     }
-
     if (!pessoa.descriptor) {
       throw new Error('Pessoa não possui descriptor facial cadastrado')
     }
 
-    const descriptorArmazenado = JSON.parse(pessoa.descriptor)
-    console.log(`\n🔄 Comparando rosto para CPF: ${cpf}`)
-    const similaridade = await compararRostos(descriptorArmazenado, descriptorCaptura)
-    const passou = saoRostosIguais(similaridade, threshold)
+    // GARANTIA DE CONVERSÃO DE TIPO:
+    // Se por acaso o banco trouxer como string, fazemos o parse. Se já for objeto, mantemos.
+    const descriptorArmazenado = typeof pessoa.descriptor === 'string' 
+      ? JSON.parse(pessoa.descriptor) 
+      : pessoa.descriptor;
 
-    // Log de acesso
+    console.log(`\n🔄 Executando análise matemática vetorial para CPF: ${cpf}`)
+    
+    // O threshold do seu .env será avaliado corretamente
+    const thresholdDoEnv = parseInt(process.env.SIMILARITY_THRESHOLD || 70)
+    
+    // Invocamos o seu faceRecognition.js passando duas ARRAYS legítimas
+    const similaridade = compararRostos(descriptorArmazenado, descriptorCaptura)
+    const passou = saoRostosIguais(similaridade, thresholdDoEnv)
+
+    // Registra a auditoria de acesso no banco de dados
     await dbRun(
       `INSERT INTO logs_acesso (cpf, resultado, similaridade) 
        VALUES (?, ?, ?)`,
       [cpf, passou ? 'aprovado' : 'rejeitado', similaridade]
     )
 
-    console.log(`📊 Resultado: ${passou ? '✅ APROVADO' : '❌ REJEITADO'}`)
+    console.log(`📊 Resultado Biometria: ${passou ? '✅ APROVADO' : '❌ REJEITADO'} (Similaridade: ${similaridade}%)`)
 
     return {
       aprovado: passou,
       similaridade,
-      threshold,
+      threshold: thresholdDoEnv,
       mensagem: passou 
-        ? 'Rosto reconhecido com sucesso' 
-        : `Similaridade abaixo do threshold (${similaridade.toFixed(2)}% < ${threshold}%)`
+        ? 'Rosto reconhecido com sucesso via rede neural' 
+        : `Acesso negado: traços faciais não conferem (${similaridade}% < ${thresholdDoEnv}%)`
     }
   } catch (err) {
     console.error('❌ Erro ao comparar foto:', err)
