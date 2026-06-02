@@ -53,7 +53,7 @@ export async function initializeDatabase() {
         nome TEXT NOT NULL,
         foto BLOB NOT NULL,
         descriptor TEXT,
-        status TEXT DEFAULT 'inativo' CHECK(status IN ('ativo', 'inativo')),
+        status TEXT DEFAULT 'inativo' CHECK(status IN ('ativo', 'inativo', 'bloqueado')),
         data_atualizacao DATETIME DEFAULT CURRENT_TIMESTAMP,
         criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -72,10 +72,29 @@ export async function initializeDatabase() {
         cpf TEXT NOT NULL,
         resultado TEXT NOT NULL,
         similaridade REAL,
+        descriptor_cadastro TEXT,
+        descriptor_captura TEXT,
+        foto_captura TEXT,
         data_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(cpf) REFERENCES pessoas(cpf)
       )
     `)
+
+    // Garantir colunas extras caso tabela já exista sem elas
+    const logsCols = await dbAll(`PRAGMA table_info(logs_acesso)`)
+    const needCols = [
+      { name: 'descriptor_cadastro', sql: 'ALTER TABLE logs_acesso ADD COLUMN descriptor_cadastro TEXT' },
+      { name: 'descriptor_captura', sql: 'ALTER TABLE logs_acesso ADD COLUMN descriptor_captura TEXT' },
+      { name: 'foto_captura', sql: 'ALTER TABLE logs_acesso ADD COLUMN foto_captura TEXT' }
+    ]
+
+    for (const col of needCols) {
+      const has = logsCols.some(c => c.name === col.name)
+      if (!has) {
+        await dbRun(col.sql)
+        console.log(`✅ Adicionada coluna ${col.name} na tabela logs_acesso`)
+      }
+    }
 
     console.log('✅ Tabelas inicializadas')
   } catch (err) {

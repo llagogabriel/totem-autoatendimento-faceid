@@ -21,11 +21,18 @@ export async function buscarPorCPF(cpf) {
 /**
  * Busca todas as pessoas
  */
-export async function listarTodas() {
+export async function listarTodas(termo = null) {
   try {
-    const pessoas = await dbAll(
-      'SELECT id, cpf, nome, status FROM pessoas'
-    )
+    let query = 'SELECT id, cpf, nome, status FROM pessoas'
+    const params = []
+
+    if (termo && termo.trim() !== '') {
+      query += ' WHERE nome LIKE ? OR cpf LIKE ?'
+      const like = `%${termo}%`
+      params.push(like, like)
+    }
+
+    const pessoas = await dbAll(query, params)
     return pessoas
   } catch (err) {
     console.error('Erro ao listar pessoas:', err)
@@ -58,7 +65,7 @@ export async function cadastrar(cpf, nome, fotoBase64, descriptor) {
  * Compara foto capturada com o descritor facial salvo no banco
  * Retorna similaridade real baseada em Distância Euclidiana
  */
-export async function compararFoto(cpf, descriptorCaptura) {
+export async function compararFoto(cpf, descriptorCaptura, fotoCapturaBase64 = null) {
   try {
     const pessoa = await buscarPorCPF(cpf)
     if (!pessoa) {
@@ -66,6 +73,21 @@ export async function compararFoto(cpf, descriptorCaptura) {
     }
     if (!pessoa.descriptor) {
       throw new Error('Pessoa não possui descriptor facial cadastrado')
+    }
+
+    // Regra de negócio: se perfil bloqueado, abortar IA e logar rejeição
+    if (pessoa.status === 'bloqueado') {
+      await dbRun(
+        `INSERT INTO logs_acesso (cpf, resultado, similaridade, descriptor_cadastro, descriptor_captura, foto_captura) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [cpf, 'rejeitado', 0, pessoa.descriptor || null, JSON.stringify(descriptorCaptura), fotoCapturaBase64]
+      )
+
+      return {
+        aprovado: false,
+        mensagem: 'Acesso negado: Perfil bloqueado permanentemente pelo administrador',
+        similaridade: 0
+      }
     }
 
     // GARANTIA DE CONVERSÃO DE TIPO:
@@ -83,11 +105,11 @@ export async function compararFoto(cpf, descriptorCaptura) {
     const similaridade = compararRostos(descriptorArmazenado, descriptorCaptura)
     const passou = saoRostosIguais(similaridade, thresholdDoEnv)
 
-    // Registra a auditoria de acesso no banco de dados
+    // Registra a auditoria de acesso no banco de dados incluindo descritores e foto de captura
     await dbRun(
-      `INSERT INTO logs_acesso (cpf, resultado, similaridade) 
-       VALUES (?, ?, ?)`,
-      [cpf, passou ? 'aprovado' : 'rejeitado', similaridade]
+      `INSERT INTO logs_acesso (cpf, resultado, similaridade, descriptor_cadastro, descriptor_captura, foto_captura) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [cpf, passou ? 'aprovado' : 'rejeitado', similaridade, pessoa.descriptor || null, JSON.stringify(descriptorCaptura), fotoCapturaBase64]
     )
 
     console.log(`📊 Resultado Biometria: ${passou ? '✅ APROVADO' : '❌ REJEITADO'} (Similaridade: ${similaridade}%)`)
@@ -153,6 +175,44 @@ export async function revogar(cpf) {
 }
 
 /**
+ * Exclui o cadastro de uma pessoa pelo CPF
+ */
+export async function excluirPessoa(cpf) {
+  try {
+    const pessoa = await buscarPorCPF(cpf)
+    if (!pessoa) throw new Error('Pessoa não encontrada')
+
+    await dbRun('DELETE FROM pessoas WHERE cpf = ?', [cpf])
+    console.log(`🗑️  Pessoa excluída: ${cpf}`)
+    return { cpf, mensagem: 'Pessoa excluída com sucesso' }
+  } catch (err) {
+    console.error('Erro ao excluir pessoa:', err)
+    throw err
+  }
+}
+
+/**
+ * Bloqueia uma pessoa permanentemente (status = 'bloqueado')
+ */
+export async function bloquear(cpf) {
+  try {
+    const pessoa = await buscarPorCPF(cpf)
+    if (!pessoa) throw new Error('Pessoa não encontrada')
+
+    await dbRun(
+      'UPDATE pessoas SET status = ?, data_atualizacao = CURRENT_TIMESTAMP WHERE cpf = ?',
+      ['bloqueado', cpf]
+    )
+
+    console.log(`🔒 Usuário bloqueado: ${cpf}`)
+    return { cpf, status: 'bloqueado', mensagem: 'Usuário bloqueado permanentemente' }
+  } catch (err) {
+    console.error('Erro ao bloquear pessoa:', err)
+    throw err
+  }
+}
+
+/**
  * Busca logs de acesso
  */
 export async function buscarLogs(cpf = null, limite = 50) {
@@ -176,6 +236,26 @@ export async function buscarLogs(cpf = null, limite = 50) {
   }
 }
 
+export async function buscarLogPorId(id) {
+  try {
+    const log = await dbGet('SELECT * FROM logs_acesso WHERE id = ?', [id])
+    if (!log) return null
+
+    // Buscar foto de cadastro e descriptor cadastrado atualizado na tabela pessoas
+    const pessoa = await buscarPorCPF(log.cpf)
+
+    return {
+      ...log,
+      foto_cadastro: pessoa ? pessoa.foto : null,
+      descriptor_cadastro: log.descriptor_cadastro || (pessoa ? pessoa.descriptor : null),
+      descriptor_captura: log.descriptor_captura || null
+    }
+  } catch (err) {
+    console.error('Erro ao buscar log por id:', err)
+    throw err
+  }
+}
+
 export default {
   buscarPorCPF,
   listarTodas,
@@ -183,5 +263,8 @@ export default {
   compararFoto,
   autorizar,
   revogar,
-  buscarLogs
+  buscarLogs,
+  buscarLogPorId,
+  bloquear,
+  excluirPessoa
 }

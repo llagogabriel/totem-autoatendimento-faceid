@@ -36,6 +36,23 @@ router.get('/pessoas/:cpf', async (req, res) => {
 })
 
 /**
+ * GET /api/pessoas
+ * Lista pessoas, aceita query param `busca`
+ */
+router.get('/pessoas', async (req, res) => {
+  try {
+    const { busca = '' } = req.query
+    console.log(`\n📍 GET /api/pessoas?busca=${busca}`)
+
+    const pessoas = await pessoasService.listarTodas(busca)
+    res.json(pessoas)
+  } catch (err) {
+    console.error('Erro:', err)
+    res.status(500).json({ erro: 'Erro ao listar pessoas' })
+  }
+})
+
+/**
  * GET /api/pessoas/:cpf/foto
  * Busca a foto completa da pessoa
  */
@@ -124,7 +141,8 @@ router.post('/comparar', async (req, res) => {
     // CORREÇÃO DE POSIÇÃO: Enviamos exatamente os parâmetros que o pessoasService espera receber
     const resultado = await pessoasService.compararFoto(
       cpf,
-      descriptorCaptura
+      descriptorCaptura,
+      fotoCapturaBase64
     )
 
     res.status(200).json(resultado)
@@ -156,6 +174,22 @@ router.put('/autorizar/:cpf', async (req, res) => {
 })
 
 /**
+ * PUT /api/bloquear/:cpf
+ * Bloqueia permanentemente o usuário (status = 'bloqueado')
+ */
+router.put('/bloquear/:cpf', async (req, res) => {
+  try {
+    const { cpf } = req.params
+    console.log(`\n📍 PUT /api/bloquear/${cpf}`)
+    const resultado = await pessoasService.bloquear(cpf)
+    res.json(resultado)
+  } catch (err) {
+    console.error('Erro ao bloquear:', err)
+    res.status(400).json({ erro: err.message || 'Erro ao bloquear usuário' })
+  }
+})
+
+/**
  * PUT /api/revogar/:cpf
  * Revoga acesso da pessoa (muda status para 'inativo')
  */
@@ -175,6 +209,23 @@ router.put('/revogar/:cpf', async (req, res) => {
 })
 
 /**
+ * DELETE /api/pessoas/:cpf
+ * Exclui cadastro de pessoa
+ */
+router.delete('/pessoas/:cpf', async (req, res) => {
+  try {
+    const { cpf } = req.params
+    console.log(`\n📍 DELETE /api/pessoas/${cpf}`)
+
+    const resultado = await pessoasService.excluirPessoa(cpf)
+    res.json(resultado)
+  } catch (err) {
+    console.error('Erro ao excluir pessoa:', err)
+    res.status(400).json({ erro: err.message || 'Erro ao excluir pessoa' })
+  }
+})
+
+/**
  * GET /api/logs
  * Busca logs de acesso
  * Query: ?cpf=XXX&limite=50
@@ -189,6 +240,25 @@ router.get('/logs', async (req, res) => {
   } catch (err) {
     console.error('Erro:', err)
     res.status(500).json({ erro: 'Erro ao buscar logs' })
+  }
+})
+
+/**
+ * GET /api/logs/:id
+ * Retorna log específico com CPF, descritores e imagens em base64
+ */
+router.get('/logs/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    console.log(`\n📍 GET /api/logs/${id}`)
+
+    const log = await pessoasService.buscarLogPorId(parseInt(id))
+    if (!log) return res.status(404).json({ erro: 'Log não encontrado' })
+
+    res.json(log)
+  } catch (err) {
+    console.error('Erro ao buscar log por id:', err)
+    res.status(500).json({ erro: 'Erro ao buscar log' })
   }
 })
 
