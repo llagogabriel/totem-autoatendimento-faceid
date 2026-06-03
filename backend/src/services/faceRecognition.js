@@ -18,7 +18,7 @@ export function calcularDistanciaEuclidiana(descriptor1, descriptor2) {
 export function compararRostos(descriptorArmazenado, descriptorCaptura) {
   try {
     const distancia = calcularDistanciaEuclidiana(descriptorArmazenado, descriptorCaptura)
-    const similaridade = Math.max(0, Math.min(100, 100 - distancia * 100))
+    const similaridade = Math.max(0, Math.min(100, 120 - distancia * 100))
     console.log(`📊 Distância Euclidiana: ${distancia.toFixed(4)} | Similaridade: ${similaridade.toFixed(2)}%`)
     return parseFloat(similaridade.toFixed(2))
   } catch (err) {

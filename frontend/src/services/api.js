@@ -86,6 +86,60 @@ export async function compararRosto(cpf, fotoCapturaBase64, descriptorCaptura) {
 }
 
 /**
+ * Lista pessoas com busca parcial
+ */
+export async function listarPessoas(busca = '') {
+  try {
+    const params = new URLSearchParams()
+    if (busca) params.append('busca', busca)
+    const response = await apiClient.get(`/pessoas?${params.toString()}`)
+    return response.data
+  } catch (err) {
+    console.error('❌ Erro ao listar pessoas:', err.message)
+    throw err
+  }
+}
+
+/**
+ * Bloqueia usuário permanentemente
+ */
+export async function bloquearPessoa(cpf) {
+  try {
+    const response = await apiClient.put(`/bloquear/${cpf}`)
+    return response.data
+  } catch (err) {
+    console.error('❌ Erro ao bloquear pessoa:', err.message)
+    throw err
+  }
+}
+
+/**
+ * Busca um log por id
+ */
+export async function buscarLogPorId(id) {
+  try {
+    const response = await apiClient.get(`/logs/${id}`)
+    return response.data
+  } catch (err) {
+    console.error('❌ Erro ao buscar log por id:', err.message)
+    throw err
+  }
+}
+
+/**
+ * Exclui uma pessoa pelo CPF
+ */
+export async function excluirPessoa(cpf) {
+  try {
+    const response = await apiClient.delete(`/pessoas/${cpf}`)
+    return response.data
+  } catch (err) {
+    console.error('❌ Erro ao excluir pessoa:', err.message)
+    throw err
+  }
+}
+
+/**
  * Autoriza a pessoa para entrar (status = 'ativo')
  */
 export async function autorizarPessoa(cpf) {
@@ -151,6 +205,10 @@ export default {
   buscarPessoa,
   buscarFoto,
   compararRosto,
+  listarPessoas,
+  bloquearPessoa,
+  buscarLogPorId,
+  excluirPessoa,
   autorizarPessoa,
   cadastrarPessoa,
   revogarPessoa,
