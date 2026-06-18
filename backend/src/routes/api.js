@@ -1,4 +1,6 @@
 import express from 'express'
+import { spawn } from 'child_process'
+import ffmpegPath from 'ffmpeg-static'
 import * as pessoasService from '../services/pessoasService.js'
 
 const router = express.Router()
@@ -272,6 +274,70 @@ router.get('/saude', (req, res) => {
     timestamp: new Date().toISOString(),
     ambiente: process.env.NODE_ENV || 'development'
   })
+})
+
+/**
+ * GET /api/camera/frame
+ * Captura um frame único da câmera RTSP usando ffmpeg e retorna como image/jpeg
+ * Query param `url` pode sobrepor a variável de ambiente CAMERA_RTSP_URL
+ */
+router.get('/camera/frame', async (req, res) => {
+  try {
+    const rtspUrl = req.query.url || process.env.CAMERA_RTSP_URL
+    console.log('\n📍 GET /api/camera/frame - url=', rtspUrl)
+
+    if (!rtspUrl) {
+      return res.status(400).json({ erro: 'URL da câmera RTSP não informada' })
+    }
+
+    // Execução do ffmpeg para capturar um frame e enviar no stdout
+    const ffmpegArgs = [
+      '-rtsp_transport', 'tcp',
+      '-i', rtspUrl,
+      '-frames:v', '1',
+      '-q:v', '2',
+      '-f', 'image2',
+      'pipe:1'
+    ]
+
+    const ffBinary = ffmpegPath || 'ffmpeg'
+    const ff = spawn(ffBinary, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
+
+    // Timeout de segurança (5s)
+    const timeout = setTimeout(() => {
+      ff.kill('SIGKILL')
+      if (!res.headersSent) res.status(504).json({ erro: 'Timeout ao capturar frame' })
+    }, 5000)
+
+    // Cabeçalhos importantes para uso via browser (CORS + evitar cache)
+    res.setHeader('Content-Type', 'image/jpeg')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+
+    ff.stdout.on('data', (chunk) => {
+      res.write(chunk)
+    })
+
+    ff.on('close', (code) => {
+      clearTimeout(timeout)
+      if (!res.headersSent) {
+        if (code === 0) {
+          res.end()
+        } else {
+          res.status(500).json({ erro: `ffmpeg retornou código ${code}` })
+        }
+      }
+    })
+
+    ff.stderr.on('data', (data) => {
+      // log útil para debug
+      console.debug('ffmpeg:', data.toString())
+    })
+  } catch (err) {
+    console.error('Erro ao capturar frame:', err)
+    if (!res.headersSent) res.status(500).json({ erro: 'Erro ao capturar frame' })
+  }
 })
 
 export default router

@@ -5,14 +5,12 @@
     </h1>
     
     <div class="relative w-full max-w-2xl aspect-video bg-black rounded-3xl overflow-hidden border-4 border-blue-600 shadow-2xl shadow-blue-500/20">
-      <video 
+      <img
         v-show="!processamento.completo && !processamento.erro"
-        ref="videoRef" 
-        autoplay 
-        muted 
-        playsinline 
+        ref="imageRef"
+        alt="camera preview"
         class="w-full h-full object-cover transform -scale-x-100"
-      ></video>
+      />
       <canvas 
         v-show="!processamento.completo && !processamento.erro"
         ref="canvasRef" 
@@ -99,8 +97,9 @@ import { useRouter } from 'vue-router'
 import * as api from '../services/api.js'
 
 const router = useRouter()
-const videoRef = ref(null)
+const imageRef = ref(null)
 const canvasRef = ref(null)
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
 const processamento = ref({
   inicializando: true,
@@ -121,6 +120,7 @@ const ALINHAMENTO_TOLERANCE_X = 0.30
 const ALINHAMENTO_TOLERANCE_Y = 0.10
 let stream = null
 let intervalId = null
+let pollIntervalId = null
 let fotoCapturaBase64 = null
 let alinhamentoTempo = 0
 let ultimoTempo = null
@@ -162,19 +162,34 @@ const inicializarSistema = async () => {
       modelosCarregadosGlobal = true
     }
     
-    console.log('📷 Acessando câmera hardware...')
-    stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { width: 1280, height: 720, facingMode: 'user' },
-      audio: false
-    })
-    
-    if (videoRef.value) {
-      videoRef.value.srcObject = stream
-      videoRef.value.onloadedmetadata = () => {
-        processamento.value.inicializando = false
-        iniciarDeteccao()
-      }
+    console.log('📷 Acessando câmera via endpoint /api/camera/frame...')
+    // Inicia polling da imagem da câmera (backend deve expor /api/camera/frame)
+    const img = imageRef.value
+    if (!img) throw new Error('Elemento de imagem não encontrado')
+
+    const startPolling = () => {
+      // força atualização adicionando cacheBust
+      try { img.crossOrigin = 'anonymous' } catch (e) {}
+      img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
     }
+
+    // Atualiza preview a cada 700ms
+    pollIntervalId = setInterval(() => {
+      try {
+        img.crossOrigin = 'anonymous'
+        img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
+      } catch (e) {
+        console.debug('Erro ao atualizar src da imagem:', e)
+      }
+    }, 700)
+
+    img.onload = () => {
+      processamento.value.inicializando = false
+      iniciarDeteccao()
+    }
+
+    // primeiro fetch imediato
+    startPolling()
   } catch (err) {
     console.error('❌ Erro ao inicializar:', err)
     processamento.value.inicializando = false
@@ -189,25 +204,27 @@ onMounted(() => {
 })
 
 const iniciarDeteccao = () => {
-  const video = videoRef.value
+  const image = imageRef.value
   const canvas = canvasRef.value
-  if (!video || !canvas) return
+  if (!image || !canvas) return
 
-  const displaySize = { width: video.videoWidth, height: video.videoHeight }
+  const displaySize = { width: image.naturalWidth || 1280, height: image.naturalHeight || 720 }
   faceapi.matchDimensions(canvas, displaySize)
 
   intervalId = setInterval(async () => {
     if (processamento.value.processando || processamento.value.comparando || processamento.value.erro) return
 
     try {
+      if (!image.naturalWidth || !image.naturalHeight) return
+
       const detection = await faceapi.detectSingleFace(
-        video, 
+        image,
         new faceapi.TinyFaceDetectorOptions()
       )
-      
+
       const context = canvas.getContext('2d')
       context.clearRect(0, 0, canvas.width, canvas.height)
-      
+
       if (detection) {
         const resizedDetection = faceapi.resizeResults(detection, displaySize)
         faceapi.draw.drawDetections(canvas, resizedDetection)
@@ -225,7 +242,7 @@ const iniciarDeteccao = () => {
       console.error('Erro na detecção contínua:', err)
       resetAlignment()
     }
-  }, 100)
+  }, 200)
 }
 
 const capturarEComparar = async () => {
@@ -237,11 +254,11 @@ const capturarEComparar = async () => {
     // 1. Para o loop de detecção em tempo real imediatamente
     clearInterval(intervalId)
 
-    const video = videoRef.value
-    
-    // 2. Extrai os landmarks e descritores biometria COM A CÂMERA AINDA LIGADA
+    const image = imageRef.value
+
+    // 2. Extrai os landmarks e descritores biometria COM A IMAGEM ATUAL
     const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptor()
 
@@ -253,16 +270,16 @@ const capturarEComparar = async () => {
 
     // 3. Renderiza a captura do frame atual no Canvas interno
     const captureCanvas = document.createElement('canvas')
-    captureCanvas.width = video.videoWidth
-    captureCanvas.height = video.videoHeight
+    captureCanvas.width = image.naturalWidth || 1280
+    captureCanvas.height = image.naturalHeight || 720
     const captureCtx = captureCanvas.getContext('2d')
-    captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height)
+    captureCtx.drawImage(image, 0, 0, captureCanvas.width, captureCanvas.height)
     fotoCapturaBase64 = captureCanvas.toDataURL('image/jpeg')
 
-    // 4. AGORA SIM podemos desligar a câmera com segurança, já temos os dados estruturados!
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop())
-      stream = null
+    // 4. Parar polling de preview
+    if (pollIntervalId) {
+      clearInterval(pollIntervalId)
+      pollIntervalId = null
     }
 
     // Fluxo visual de feedback do totem
@@ -375,6 +392,7 @@ const reiniciar = () => {
 onUnmounted(() => {
   if (stream) stream.getTracks().forEach(t => t.stop())
   if (intervalId) clearInterval(intervalId)
+  if (pollIntervalId) clearInterval(pollIntervalId)
 })
 </script>
 

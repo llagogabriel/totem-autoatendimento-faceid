@@ -40,8 +40,8 @@
             </button>
           </div>
 
-          <div class="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
-            <video ref="cameraVideo" autoplay muted playsinline class="h-full w-full object-cover scale-x-[-1]"></video>
+            <div class="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
+            <img ref="cameraImg" alt="camera preview" class="h-full w-full object-cover scale-x-[-1]" />
             <canvas ref="cameraCanvas" class="hidden"></canvas>
             
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -99,8 +99,9 @@ const mensagemTipo = ref('')
 // --- Estados do Modal de Câmera Biométrica ---
 const cameraActive = ref(false)
 const cameraStream = ref(null)
-const cameraVideo = ref(null)
+const cameraImg = ref(null)
 const cameraCanvas = ref(null)
+let cameraPollInterval = null
 
 const MODEL_URL = '/models'
 let modelosCarregados = false
@@ -155,54 +156,57 @@ const openCamera = async () => {
   mensagemTipo.value = ''
   cameraActive.value = true
   
-  // Força o Vue a renderizar o modal HTML antes de injetar o stream no <video>
+  // Força o Vue a renderizar o modal HTML antes de injetar o stream no elemento
   await nextTick()
-  
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720, facingMode: 'user' },
-      audio: false
-    })
-    cameraStream.value = stream
-    
-    if (cameraVideo.value) {
-      cameraVideo.value.srcObject = stream
-      await cameraVideo.value.play()
-    }
+    const img = cameraImg.value
+    if (!img) throw new Error('Elemento de imagem não encontrado')
+
+    // Polling simples para preview (server deve ter /api/camera/frame)
+    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
+    try { img.crossOrigin = 'anonymous' } catch(e) {}
+    img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
+    cameraPollInterval = setInterval(() => {
+      try { img.crossOrigin = 'anonymous' } catch(e) {}
+      img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
+    }, 700)
   } catch (err) {
     cameraActive.value = false
-    console.error('Erro ao abrir webcam:', err)
+    console.error('Erro ao abrir câmera via endpoint:', err)
     mensagemTipo.value = 'erro'
-    mensagem.value = 'Não foi possível acessar a webcam. Verifique as permissões do navegador.'
+    mensagem.value = 'Não foi possível acessar a câmera. Verifique a configuração do backend e do dispositivo.'
   }
 }
 
 const closeCamera = () => {
   cameraActive.value = false
   if (cameraStream.value) {
-    // Corta a energia do hardware da câmera imediatamente
     cameraStream.value.getTracks().forEach(track => track.stop())
     cameraStream.value = null
   }
-  if (cameraVideo.value) {
-    cameraVideo.value.srcObject = null
+  if (cameraImg.value) {
+    cameraImg.value.src = ''
+  }
+  if (cameraPollInterval) {
+    clearInterval(cameraPollInterval)
+    cameraPollInterval = null
   }
 }
 
 // --- Captura de Foto com Correção de Espelho ---
 const captureFromCamera = () => {
-  if (!cameraVideo.value || !cameraCanvas.value) {
+  if (!cameraImg.value || !cameraCanvas.value) {
     mensagemTipo.value = 'erro'
     mensagem.value = 'Webcam não está pronta. Tente novamente.'
     return
   }
-
-  const video = cameraVideo.value
+  const img = cameraImg.value
   const canvas = cameraCanvas.value
   
   // Define dimensões limpas em HD com base no stream real capturado
-  canvas.width = video.videoWidth || 1280
-  canvas.height = video.videoHeight || 720
+  canvas.width = img.naturalWidth || 1280
+  canvas.height = img.naturalHeight || 720
   
   const ctx = canvas.getContext('2d')
 
@@ -211,7 +215,7 @@ const captureFromCamera = () => {
   ctx.translate(canvas.width, 0)
   ctx.scale(-1, 1)
   
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
   
   // Exporta em alta definição
   preview.value = canvas.toDataURL('image/jpeg', 0.95)
