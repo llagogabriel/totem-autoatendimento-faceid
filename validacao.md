@@ -9,10 +9,10 @@ Para a validação da solução foram utilizados:
 ## Trabalhos e Materiais de Referência
 
 **Código de Referência**
-O desenvolvimento inicial utilizou como base o seguinte projeto disponível no GitHub:
+O desenvolvimento inicial utilizou como base o seguinte projeto disponível no GitHub: <br>
 
-Nome do projeto: [face-api.js]
-Link: [https://github.com/justadudewhohacks/face-api.js.git]
+Nome do projeto: face-api.js <br>
+Link: https://github.com/justadudewhohacks/face-api.js.git
 
 O código foi estudado e adaptado para atender aos requisitos específicos do sistema de autoatendimento.
 
@@ -44,11 +44,12 @@ registro de presença, sejam manuais ou digitais simples, estão sujeitos a frau
 Face-API.js e Redes Neurais Convolucionais (CNN) para realizar a identificação facial em tempo real.
 
 **Base de Dados**
+
 Para validação e testes do sistema foi utilizada a base de dados:
 
-Nome: The Olivetti Research Laboratory (ORL) face dataset
-Origem: Kaggle
-Link: [https://www.kaggle.com/datasets/tavarez/the-orl-database-for-training-and-testing]
+Nome: The Olivetti Research Laboratory (ORL) face dataset <br>
+Origem: Kaggle <br>
+Link: https://www.kaggle.com/datasets/tavarez/the-orl-database-for-training-and-testing
 
 A base de dados ORL Database of Faces foi desenvolvida para pesquisas em reconhecimento facial e contém 400 imagens distribuídas entre 40 indivíduos distintos, com 10 imagens para cada pessoa. 
 As fotografias foram capturadas entre 1992 e 1994 em condições controladas, mas apresentam variações de iluminação, expressões faciais (como sorrindo ou não) e características visuais, como o uso de óculos. 
@@ -57,17 +58,54 @@ avaliação e validação de algoritmos de reconhecimento facial.
 
 ## Metodologia da Validação
 
-Para validação do projeto foi criado um script em JavaScript que:
+Para validação do projeto foi criado um programa em JavaScript que:
+
 1. Carrega os modelos de detecção facial;
 2. Processa 400 imagens do dataset The Olivetti Research Laboratory (ORL) face dataset (320 treino, 80 teste);
 3. Extrai descritores faciais das imagens;
 4. Classifica as imagens de teste comparando com o treino;
 5. Gera um arquivo CSV com resultados e métricas.
 
-Resultado esperado:
-Após executar, você verá no console:
-✅ Modelos carregados
-📊 Resultado (acurácia, precisão, matriz de confusão)
-💾 Arquivo CSV salvo em: dataset_test_results.csv
+O código fonte dessa validação pode ser encontrado neste mesmo repositório em backend/scripts/testDataset.js no branch feat/validacao.
 
-   
+Como executar? 
+1. Abra um terminal dentro do projeto;
+2. Execute cd d:\Downloads\projetoVC\totem-autoatendimento-faceid\backend para encontrar a pasta do script;
+3. Execute node scripts/testDataset.js para rodar o script; 
+
+Resultado esperado:
+Após executar, você verá no terminal:
+✅ Modelos carregados
+📚 Total de imagens: 400
+   Treino: 320
+   Teste: 80
+📊 Resultado do teste (quantidade de acertos, acurácia, precisão, matriz de confusão)
+💾 Resultados salvos em CSV: dataset_test_results.csv
+
+## Resultados Obtidos 
+
+Ao executar a validação, os resultados obtidos foram:
+
+📊 Resultado do teste:
+   Acertos: 79/80
+   Acurácia: 98.75%
+   Precisão micro: 1.0000
+   Precisão macro: 1.0000
+
+📊 Matriz de Confusão (Resumo)
+
+| Classe | Acertos | Erros |
+|---------|---------:|------:|
+| s1  | 2 | 0 |
+| s2  | 2 | 0 |
+| s3  | 2 | 0 |m 
+| ... | ... | ... |
+| s31 | 2 | 0 |
+| s32 | 1 | 1 |
+| s33 | 2 | 0 |
+| ... | ... | ... |
+| s40 | 2 | 0 |
+
+A matriz de confusão demonstrou excelente desempenho do sistema de reconhecimento facial. Das 80 imagens utilizadas para teste (2 imagens por indivíduo), a única falha observada ocorreu para o indivíduo **s32**, em que uma das imagens não atingiu o limiar mínimo de confiança para identificação e não foi reconhecida, sendo classificada como **NO_PREDICTION**.
+
+Além de um arquivo csv criado automaticamente após o fim da execução, contendo todos os resultados do modelo. Esse arquivo pode ser encontrado neste repositório em backend/dataset_test_results.csv no branch feat/validacao.
