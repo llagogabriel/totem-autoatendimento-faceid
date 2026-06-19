@@ -73,24 +73,24 @@ Como executar?
 2. Execute cd d:\Downloads\projetoVC\totem-autoatendimento-faceid\backend para encontrar a pasta do script;
 3. Execute node scripts/testDataset.js para rodar o script; 
 
-Resultado esperado:
-Após executar, você verá no terminal:
-✅ Modelos carregados
-📚 Total de imagens: 400
-   Treino: 320
-   Teste: 80
-📊 Resultado do teste (quantidade de acertos, acurácia, precisão, matriz de confusão)
-💾 Resultados salvos em CSV: dataset_test_results.csv
+Resultado esperado: <br>
+Após executar, você verá no terminal: <br>
+✅ Modelos carregados <br>
+📚 Total de imagens: 400 <br>
+   Treino: 320 <br>
+   Teste: 80 <br>
+📊 Resultado do teste (quantidade de acertos, acurácia, precisão, matriz de confusão) <br>
+💾 Resultados salvos em CSV: dataset_test_results.csv 
 
 ## Resultados Obtidos 
 
 Ao executar a validação, os resultados obtidos foram:
 
-📊 Resultado do teste:
-   Acertos: 79/80
-   Acurácia: 98.75%
-   Precisão micro: 1.0000
-   Precisão macro: 1.0000
+📊 Resultado do teste: <br>
+   Acertos: 79/80 <br>
+   Acurácia: 98.75% <br>
+   Precisão micro: 1.0000 <br>
+   Precisão macro: 1.0000 <br>
 
 📊 Matriz de Confusão (Resumo)
 
