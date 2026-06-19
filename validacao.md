@@ -61,7 +61,7 @@ avaliação e validação de algoritmos de reconhecimento facial.
 Para validação do projeto foi criado um programa em JavaScript que:
 
 1. Carrega os modelos de detecção facial;
-2. Processa 400 imagens do dataset The Olivetti Research Laboratory (ORL) face dataset (320 treino, 80 teste);
+2. Processa 400 imagens do dataset “The Olivetti Research Laboratory (ORL) face dataset” (320 treino, 80 teste);
 3. Extrai descritores faciais das imagens;
 4. Classifica as imagens de teste comparando com o treino;
 5. Gera um arquivo CSV com resultados e métricas.
@@ -98,7 +98,7 @@ Ao executar a validação, os resultados obtidos foram:
 |---------|---------:|------:|
 | s1  | 2 | 0 |
 | s2  | 2 | 0 |
-| s3  | 2 | 0 |m 
+| s3  | 2 | 0 |
 | ... | ... | ... |
 | s31 | 2 | 0 |
 | s32 | 1 | 1 |
@@ -108,4 +108,22 @@ Ao executar a validação, os resultados obtidos foram:
 
 A matriz de confusão demonstrou excelente desempenho do sistema de reconhecimento facial. Das 80 imagens utilizadas para teste (2 imagens por indivíduo), a única falha observada ocorreu para o indivíduo **s32**, em que uma das imagens não atingiu o limiar mínimo de confiança para identificação e não foi reconhecida, sendo classificada como **NO_PREDICTION**.
 
-Além de um arquivo csv criado automaticamente após o fim da execução, contendo todos os resultados do modelo. Esse arquivo pode ser encontrado neste repositório em backend/dataset_test_results.csv no branch feat/validacao.
+Além disso, um arquivo csv foi criado automaticamente após o fim da execução, contendo todos os resultados do modelo. Esse arquivo pode ser encontrado neste repositório em backend/dataset_test_results.csv no branch feat/validacao.
+
+## Comparação com o Artigo de Referência
+
+A base de dados “The Olivetti Research Laboratory (ORL) face dataset” foi utilizada no artigo #1 de forma aumentada para treinar uma Rede Neural Convolucional. 
+
+Os autores avaliaram o impacto da ampliação da base de dados no desempenho do modelo, obtendo os seguintes resultados:
+
+| Quantidade de imagens utilizadas | Acurácia (%) |
+|---------|---------:|
+| 100000  | 2.5 |
+| 200000  | 23 |
+| 300000  | 95 |
+| 400000 | 97 |
+
+No experimento realizado neste projeto, foi utilizada a mesma base ORL contendo apenas as 400 imagens originais, sem aplicação de técnicas de ampliação. Mesmo assim, a solução baseada em Face-API.js alcançou uma acurácia de 98,75%, com 79 acertos em 80 imagens de teste.
+
+Essa comparação sugere que a utilização de modelos pré-treinados disponibilizados pelo Face-API.js apresentou excelente desempenho sobre a base ORL, alcançando uma acurácia superior à reportada no artigo analisado, mesmo sem a necessidade de gerar centenas de milhares de imagens sintéticas para treinamento.
+
