@@ -40,8 +40,8 @@
             </button>
           </div>
 
-            <div class="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
-            <img ref="cameraImg" alt="camera preview" class="h-full w-full object-cover scale-x-[-1]" />
+          <div class="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
+            <img ref="cameraImg" alt="camera preview" class="h-full w-full object-cover" />
             <canvas ref="cameraCanvas" class="hidden"></canvas>
             
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -98,11 +98,8 @@ const mensagemTipo = ref('')
 
 // --- Estados do Modal de Câmera Biométrica ---
 const cameraActive = ref(false)
-const cameraStream = ref(null)
 const cameraImg = ref(null)
 const cameraCanvas = ref(null)
-let cameraPollInterval = null
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
 const MODEL_URL = '/models'
 let modelosCarregados = false
@@ -163,26 +160,13 @@ const openCamera = async () => {
     const img = cameraImg.value
     if (!img) throw new Error('Elemento de imagem não encontrado')
 
-    console.log('📷 Iniciando polling da câmera RTSP...')
+    console.log('📷 Conectando a Tela de Cadastro ao fluxo fluido RTSP...')
     
-    // Inicia polling da imagem da câmera
-    const startPolling = () => {
-      try { img.crossOrigin = 'anonymous' } catch (e) {}
-      img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
-    }
+    try { img.crossOrigin = 'anonymous' } catch (e) {}
+    
+    // Aponta o elemento diretamente para o nosso stream contínuo do service de API
+    img.src = api.obterUrlStream()
 
-    // Atualiza preview a cada 700ms
-    cameraPollInterval = setInterval(() => {
-      try {
-        img.crossOrigin = 'anonymous'
-        img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
-      } catch (e) {
-        console.debug('Erro ao atualizar src da imagem:', e)
-      }
-    }, 700)
-
-    // Primeiro fetch imediato
-    startPolling()
   } catch (err) {
     cameraActive.value = false
     console.error('Erro ao abrir câmera:', err)
@@ -196,28 +180,24 @@ const closeCamera = () => {
   if (cameraImg.value) {
     cameraImg.value.src = ''
   }
-  if (cameraPollInterval) {
-    clearInterval(cameraPollInterval)
-    cameraPollInterval = null
-  }
 }
 
-// --- Captura de Foto com Correção de Espelho ---
+// --- Captura de Foto a partir do Stream ---
 const captureFromCamera = () => {
   if (!cameraImg.value || !cameraCanvas.value) {
     mensagemTipo.value = 'erro'
-    mensagem.value = 'Webcam não está pronta. Tente novamente.'
+    mensagem.value = 'A stream da câmera não está pronta. Tente novamente.'
     return
   }
   const img = cameraImg.value
   const canvas = cameraCanvas.value
   
+  // Utiliza as dimensões nativas da imagem recebida do FFmpeg
   canvas.width = img.naturalWidth || 1280
   canvas.height = img.naturalHeight || 720
   
   const ctx = canvas.getContext('2d')
-  ctx.translate(canvas.width, 0)
-  ctx.scale(-1, 1)
+  // Desenhando o quadro limpo direto do stream contínuo
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
   
   preview.value = canvas.toDataURL('image/jpeg', 0.95)
@@ -282,7 +262,6 @@ async function submit() {
     mensagemTipo.value = 'sucesso'
     mensagem.value = 'Cadastro realizado com sucesso.'
     
-    // Reseta o formulário pós-sucesso
     cpf.value = ''
     nome.value = ''
     preview.value = null
