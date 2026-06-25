@@ -2,6 +2,7 @@ import axios from 'axios'
 
 const defaultHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
 const defaultProtocol = typeof window !== 'undefined' ? window.location.protocol : 'http:'
+// URL base padrão para as requisições AJAX do Axios (ex: http://localhost:3000/api)
 const BASE_URL = import.meta.env.VITE_API_URL || `${defaultProtocol}//${defaultHost}:3000/api`
 
 const apiClient = axios.create({
@@ -10,6 +11,16 @@ const apiClient = axios.create({
     'Content-Type': 'application/json'
   }
 })
+
+/**
+ * Retorna a URL completa do stream de vídeo da câmera.
+ * Usada diretamente no src da tag <img> da TelaCaptura.vue
+ */
+export function obterUrlStream() {
+  // Remove o "/api" do final da URL se ele existir, pois a rota da câmera geralmente fica na raiz ou tratada separadamente.
+  // Se a rota do backend foi criada exatamente como '/api/camera/stream', mantemos o BASE_URL.
+  return `${BASE_URL}/camera/stream`
+}
 
 /**
  * Busca dados da pessoa pelo CPF
@@ -202,6 +213,7 @@ export async function verificarSaude() {
 }
 
 export default {
+  obterUrlStream,
   buscarPessoa,
   buscarFoto,
   compararRosto,

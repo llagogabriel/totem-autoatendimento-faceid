@@ -1,9 +1,12 @@
 import express from 'express'
 import { spawn } from 'child_process'
-import ffmpegPath from 'ffmpeg-static'
 import * as pessoasService from '../services/pessoasService.js'
 
-const router = express.Router()
+import ffmpeg from 'fluent-ffmpeg'
+
+const router = express.Router();
+const RTSP_URL = 'rtsp://10.132.5.101:554/user=admin&password=&channel=1&stream=0.sdp';
+
 
 /**
  * GET /api/pessoas/:cpf
@@ -85,7 +88,6 @@ router.post('/pessoas', async (req, res) => {
   try {
     const { cpf, nome, foto, descriptor } = req.body
 
-    // Log incoming request summary for debugging network/size issues
     console.log(`\n📍 POST /api/pessoas - recebendo cadastro`)
     console.log('Headers:', {
       host: req.headers.host,
@@ -123,11 +125,6 @@ router.post('/pessoas', async (req, res) => {
  * Compara descritor capturado com descritor cadastrado no banco
  * Body: { cpf, fotoCapturaBase64, descriptorCaptura }
  */
-/**
- * POST /api/comparar
- * Compara descritor capturado com descritor cadastrado no banco
- * Body: { cpf, fotoCapturaBase64, descriptorCaptura }
- */
 router.post('/comparar', async (req, res) => {
   try {
     const { cpf, fotoCapturaBase64, descriptorCaptura } = req.body
@@ -140,7 +137,6 @@ router.post('/comparar', async (req, res) => {
 
     console.log(`\n📍 POST /api/comparar - CPF: ${cpf}`)
 
-    // CORREÇÃO DE POSIÇÃO: Enviamos exatamente os parâmetros que o pessoasService espera receber
     const resultado = await pessoasService.compararFoto(
       cpf,
       descriptorCaptura,
@@ -230,7 +226,6 @@ router.delete('/pessoas/:cpf', async (req, res) => {
 /**
  * GET /api/logs
  * Busca logs de acesso
- * Query: ?cpf=XXX&limite=50
  */
 router.get('/logs', async (req, res) => {
   try {
@@ -279,65 +274,166 @@ router.get('/saude', (req, res) => {
 /**
  * GET /api/camera/frame
  * Captura um frame único da câmera RTSP usando ffmpeg e retorna como image/jpeg
- * Query param `url` pode sobrepor a variável de ambiente CAMERA_RTSP_URL
  */
 router.get('/camera/frame', async (req, res) => {
   try {
     const rtspUrl = req.query.url || process.env.CAMERA_RTSP_URL
-    console.log('\n📍 GET /api/camera/frame - url=', rtspUrl)
+
+    console.log(
+      '\n📷 GET /api/camera/frame - url=',
+      rtspUrl ? rtspUrl.substring(0, 50) + '...' : 'undefined'
+    )
 
     if (!rtspUrl) {
-      return res.status(400).json({ erro: 'URL da câmera RTSP não informada' })
+      return res.status(400).json({
+        erro: 'URL da câmera RTSP não informada',
+        dica: 'Configure CAMERA_RTSP_URL no .env ou use query param ?url=rtsp://...'
+      })
     }
 
-    // Execução do ffmpeg para capturar um frame e enviar no stdout
     const ffmpegArgs = [
-      '-rtsp_transport', 'tcp',
-      '-i', rtspUrl,
-      '-frames:v', '1',
-      '-q:v', '2',
-      '-f', 'image2',
+      '-rtsp_transport',
+      'tcp',
+      '-i',
+      rtspUrl,
+      '-frames:v',
+      '1',
+      '-f',
+      'mjpeg',
       'pipe:1'
     ]
 
-    const ffBinary = ffmpegPath || 'ffmpeg'
-    const ff = spawn(ffBinary, ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
+    console.log('🚀 Iniciando ffmpeg...')
+    console.log('Args:', ffmpegArgs.join(' '))
 
-    // Timeout de segurança (5s)
-    const timeout = setTimeout(() => {
-      ff.kill('SIGKILL')
-      if (!res.headersSent) res.status(504).json({ erro: 'Timeout ao capturar frame' })
-    }, 5000)
-
-    // Cabeçalhos importantes para uso via browser (CORS + evitar cache)
-    res.setHeader('Content-Type', 'image/jpeg')
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
-
-    ff.stdout.on('data', (chunk) => {
-      res.write(chunk)
+    const ffmpegProcess = spawn('ffmpeg', ffmpegArgs, {
+      stdio: ['ignore', 'pipe', 'pipe']
     })
 
-    ff.on('close', (code) => {
-      clearTimeout(timeout)
+    const chunks = []
+
+    const timeout = setTimeout(() => {
+      console.warn('⚠️ Timeout de 30 segundos ao capturar frame')
+
+      ffmpegProcess.kill('SIGKILL')
+
       if (!res.headersSent) {
-        if (code === 0) {
-          res.end()
-        } else {
-          res.status(500).json({ erro: `ffmpeg retornou código ${code}` })
-        }
+        res.status(504).json({
+          erro: 'Timeout ao capturar frame da câmera'
+        })
+      }
+    }, 30000)
+
+    ffmpegProcess.stdout.on('data', (chunk) => {
+      console.log(`📦 Recebidos ${chunk.length} bytes`)
+      chunks.push(chunk)
+    })
+
+    ffmpegProcess.stderr.on('data', (data) => {
+      console.log('FFMPEG:', data.toString())
+    })
+
+    ffmpegProcess.on('error', (err) => {
+      clearTimeout(timeout)
+
+      console.error('❌ Erro ao iniciar ffmpeg:', err)
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          erro: 'Erro ao executar ffmpeg',
+          detalhes: err.message
+        })
       }
     })
 
-    ff.stderr.on('data', (data) => {
-      // log útil para debug
-      console.debug('ffmpeg:', data.toString())
+    ffmpegProcess.on('close', (code) => {
+      clearTimeout(timeout)
+
+      const imageBuffer = Buffer.concat(chunks)
+
+      console.log(
+        `📸 FFmpeg finalizado | código=${code} | bytes=${imageBuffer.length}`
+      )
+
+      if (imageBuffer.length > 0) {
+        res.setHeader('Content-Type', 'image/jpeg')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader(
+          'Cache-Control',
+          'no-store, no-cache, must-revalidate'
+        )
+
+        return res.end(imageBuffer)
+      }
+
+      if (!res.headersSent) {
+        console.error('❌ Nenhum frame recebido da câmera')
+
+        return res.status(500).json({
+          erro: 'Nenhum frame recebido da câmera'
+        })
+      }
     })
   } catch (err) {
-    console.error('Erro ao capturar frame:', err)
-    if (!res.headersSent) res.status(500).json({ erro: 'Erro ao capturar frame' })
+    console.error('❌ Erro inesperado:', err)
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        erro: 'Erro interno ao capturar frame'
+      })
+    }
   }
 })
 
 export default router
+
+// ATENÇÃO: Se o arquivo usar "app.get", mude para "app.get('/api/camera/stream'...)
+/**
+ * GET /api/camera/stream
+ * Fornece um feed de vídeo MJPEG contínuo (vídeo fluido) da câmera RTSP
+ */
+/**
+ * GET /api/camera/stream
+ * Fornece um feed de vídeo MJPEG contínuo com cabeçalhos rigorosos para o Chrome
+ */
+router.get('/camera/stream', (req, res) => {
+  // Cabeçalho principal com capitalização correta
+  res.writeHead(200, {
+    'Content-Type': 'multipart/x-mixed-replace; boundary=--frame',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, pre-check=0, post-check=0',
+    'Connection': 'keep-alive',
+    'Pragma': 'no-cache',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  const rtspUrl = process.env.CAMERA_RTSP_URL || RTSP_URL;
+
+  console.log('🎬 Iniciando fluxo de vídeo contínuo via FFmpeg...');
+
+  // Adicionamos parâmetros para forçar o FFmpeg a escrever o bloco interno 
+  // com "Content-Type" perfeitamente compatível com o padrão MIME do navegador
+  const ffmpegArgs = [
+    '-rtsp_transport', 'tcp',
+    '-i', rtspUrl,
+    '-vcodec', 'mjpeg',
+    '-f', 'mpjpeg',
+    '-boundary_tag', 'frame', // Garante que o separador seja exatamente '--frame'
+    '-q:v', '5',
+    'pipe:1'
+  ];
+
+  const ffmpegProcess = spawn('ffmpeg', ffmpegArgs, {
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  ffmpegProcess.stdout.pipe(res);
+
+  ffmpegProcess.on('error', (err) => {
+    console.error('❌ Erro no processo do FFmpeg Stream:', err.message);
+  });
+
+  req.on('close', () => {
+    console.log('🛑 Cliente desconectado. Encerrando FFmpeg Stream...');
+    ffmpegProcess.kill('SIGKILL');
+  });
+});

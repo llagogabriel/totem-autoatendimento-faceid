@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import { initializeDatabase } from './src/models/database.js'
+import { initializeDatabase, initDb } from './src/models/database.js'
 import apiRoutes from './src/routes/api.js'
 import { logRequests, handleErrors } from './src/middleware/errorHandler.js'
 
@@ -52,6 +52,9 @@ app.use(handleErrors)
 async function start() {
   try {
     console.log('🔧 Inicializando backend...\n')
+    
+    // Inicializar driver SQL.js
+    await initDb()
     
     // Inicializar banco de dados
     await initializeDatabase()

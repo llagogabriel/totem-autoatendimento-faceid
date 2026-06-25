@@ -102,6 +102,7 @@ const cameraStream = ref(null)
 const cameraImg = ref(null)
 const cameraCanvas = ref(null)
 let cameraPollInterval = null
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
 const MODEL_URL = '/models'
 let modelosCarregados = false
@@ -150,41 +151,48 @@ function onFileChange(e) {
   reader.readAsDataURL(f)
 }
 
-// --- Controle de Fluxo da Webcam (Modificado para o Novo Modal) ---
+// --- Controle de Fluxo da Webcam ---
 const openCamera = async () => {
   mensagem.value = ''
   mensagemTipo.value = ''
   cameraActive.value = true
   
-  // Força o Vue a renderizar o modal HTML antes de injetar o stream no elemento
   await nextTick()
 
   try {
     const img = cameraImg.value
     if (!img) throw new Error('Elemento de imagem não encontrado')
 
-    // Polling simples para preview (server deve ter /api/camera/frame)
-    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
-    try { img.crossOrigin = 'anonymous' } catch(e) {}
-    img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
-    cameraPollInterval = setInterval(() => {
-      try { img.crossOrigin = 'anonymous' } catch(e) {}
+    console.log('📷 Iniciando polling da câmera RTSP...')
+    
+    // Inicia polling da imagem da câmera
+    const startPolling = () => {
+      try { img.crossOrigin = 'anonymous' } catch (e) {}
       img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
+    }
+
+    // Atualiza preview a cada 700ms
+    cameraPollInterval = setInterval(() => {
+      try {
+        img.crossOrigin = 'anonymous'
+        img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
+      } catch (e) {
+        console.debug('Erro ao atualizar src da imagem:', e)
+      }
     }, 700)
+
+    // Primeiro fetch imediato
+    startPolling()
   } catch (err) {
     cameraActive.value = false
-    console.error('Erro ao abrir câmera via endpoint:', err)
+    console.error('Erro ao abrir câmera:', err)
     mensagemTipo.value = 'erro'
-    mensagem.value = 'Não foi possível acessar a câmera. Verifique a configuração do backend e do dispositivo.'
+    mensagem.value = 'Falha ao acessar a câmera: ' + err.message
   }
 }
 
 const closeCamera = () => {
   cameraActive.value = false
-  if (cameraStream.value) {
-    cameraStream.value.getTracks().forEach(track => track.stop())
-    cameraStream.value = null
-  }
   if (cameraImg.value) {
     cameraImg.value.src = ''
   }
@@ -204,20 +212,14 @@ const captureFromCamera = () => {
   const img = cameraImg.value
   const canvas = cameraCanvas.value
   
-  // Define dimensões limpas em HD com base no stream real capturado
   canvas.width = img.naturalWidth || 1280
   canvas.height = img.naturalHeight || 720
   
   const ctx = canvas.getContext('2d')
-
-  // Mágica do Espelhamento: Inverte o Canvas horizontalmente para a foto
-  // ser salva idêntica ao que a pessoa vê na tela do totem
   ctx.translate(canvas.width, 0)
   ctx.scale(-1, 1)
-  
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
   
-  // Exporta em alta definição
   preview.value = canvas.toDataURL('image/jpeg', 0.95)
   closeCamera()
 }

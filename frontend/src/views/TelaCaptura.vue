@@ -4,17 +4,17 @@
       Validação Biométrica
     </h1>
     
-    <div class="relative w-full max-w-2xl aspect-video bg-black rounded-3xl overflow-hidden border-4 border-blue-600 shadow-2xl shadow-blue-500/20">
+<div class="relative w-full max-w-2xl aspect-video bg-black rounded-3xl overflow-hidden border-4 border-blue-600 shadow-2xl shadow-blue-500/20">
       <img
         v-show="!processamento.completo && !processamento.erro"
         ref="imageRef"
         alt="camera preview"
-        class="w-full h-full object-cover transform -scale-x-100"
+        class="w-full h-full object-cover select-none pointer-events-none"
       />
       <canvas 
         v-show="!processamento.completo && !processamento.erro"
         ref="canvasRef" 
-        class="absolute inset-0 w-full h-full transform -scale-x-100"
+        class="absolute inset-0 w-full h-full pointer-events-none"
       ></canvas>
 
       <div v-if="!processamento.completo && !processamento.erro" class="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -99,7 +99,6 @@ import * as api from '../services/api.js'
 const router = useRouter()
 const imageRef = ref(null)
 const canvasRef = ref(null)
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
 const processamento = ref({
   inicializando: true,
@@ -126,7 +125,7 @@ let alinhamentoTempo = 0
 let ultimoTempo = null
 let faceAligned = false
 
-let modelosCarregadosGlobal = false // Evita recarregar modelos caso clique em reiniciar
+let modelosCarregadosGlobal = false
 
 const obterMensagem = () => {
   if (processamento.value.inicializando) return 'Inicializando câmera and modelo de IA...'
@@ -139,10 +138,9 @@ const obterMensagem = () => {
   return 'Alinhe seu corpo e rosto à área vertical central para iniciar a captura'
 }
 
-// Função isolada para gerenciar a inicialização
 const inicializarSistema = async () => {
   processamento.value.inicializando = true
-  await nextTick() // Garante que as referências do DOM (videoRef) estão prontas
+  await nextTick()
 
   try {
     const cpf = sessionStorage.getItem('cpf_atual')
@@ -153,7 +151,6 @@ const inicializarSistema = async () => {
 
     const MODEL_URL = '/models'
     
-    // Só carrega se ainda não estiver carregado na memória global da página
     if (!modelosCarregadosGlobal) {
       console.log('📦 Carregando modelos da face-api.js...')
       await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL)
@@ -162,40 +159,31 @@ const inicializarSistema = async () => {
       modelosCarregadosGlobal = true
     }
     
-    console.log('📷 Acessando câmera via endpoint /api/camera/frame...')
-    // Inicia polling da imagem da câmera (backend deve expor /api/camera/frame)
+    console.log('📷 Conectando ao fluxo de vídeo contínuo RTSP do laboratório...')
     const img = imageRef.value
     if (!img) throw new Error('Elemento de imagem não encontrado')
 
-    const startPolling = () => {
-      // força atualização adicionando cacheBust
-      try { img.crossOrigin = 'anonymous' } catch (e) {}
-      img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
-    }
+    try { img.crossOrigin = 'anonymous'; } catch (e) {}
 
-    // Atualiza preview a cada 700ms
-    pollIntervalId = setInterval(() => {
-      try {
-        img.crossOrigin = 'anonymous'
-        img.src = `${API_BASE}/api/camera/frame?cacheBust=${Date.now()}`
-      } catch (e) {
-        console.debug('Erro ao atualizar src da imagem:', e)
+    // 1. Aponta diretamente para a rota de stream contínuo
+    img.src = api.obterUrlStream()
+
+    // 2. CORREÇÃO CRÍTICA: Não esperamos mais o onload infinito do MJPEG.
+    // Damos um pequeno delay de 500ms para a conexão com o FFmpeg se estabilizar 
+    // e já liberamos a IA para começar a varredura biométrica na tela.
+    setTimeout(() => {
+      if (processamento.value.inicializando) {
+        processamento.value.inicializando = false
+        iniciarDeteccao()
       }
-    }, 700)
+    }, 500)
 
-    img.onload = () => {
-      processamento.value.inicializando = false
-      iniciarDeteccao()
-    }
-
-    // primeiro fetch imediato
-    startPolling()
   } catch (err) {
     console.error('❌ Erro ao inicializar:', err)
     processamento.value.inicializando = false
     processamento.value.erro = true
     processamento.value.erroTitulo = 'Erro ao Inicializar'
-    processamento.value.erroMensagem = 'Verifique se outra aba não está usando a câmera. Detalhes: ' + err.message
+    processamento.value.erroMensagem = err.message || 'Falha ao inicializar câmera'
   }
 }
 
@@ -251,12 +239,10 @@ const capturarEComparar = async () => {
   processamento.value.processando = true
   
   try {
-    // 1. Para o loop de detecção em tempo real imediatamente
     clearInterval(intervalId)
 
     const image = imageRef.value
 
-    // 2. Extrai os landmarks e descritores biometria COM A IMAGEM ATUAL
     const detection = await faceapi
       .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks()
@@ -268,7 +254,6 @@ const capturarEComparar = async () => {
 
     const descriptorCaptura = Array.from(detection.descriptor)
 
-    // 3. Renderiza a captura do frame atual no Canvas interno
     const captureCanvas = document.createElement('canvas')
     captureCanvas.width = image.naturalWidth || 1280
     captureCanvas.height = image.naturalHeight || 720
@@ -276,13 +261,6 @@ const capturarEComparar = async () => {
     captureCtx.drawImage(image, 0, 0, captureCanvas.width, captureCanvas.height)
     fotoCapturaBase64 = captureCanvas.toDataURL('image/jpeg')
 
-    // 4. Parar polling de preview
-    if (pollIntervalId) {
-      clearInterval(pollIntervalId)
-      pollIntervalId = null
-    }
-
-    // Fluxo visual de feedback do totem
     processamento.value.capturado = true
     processamento.value.capturadoMensagem = 'Capturado com sucesso'
     await new Promise(resolve => setTimeout(resolve, 1500))
@@ -295,7 +273,6 @@ const capturarEComparar = async () => {
     processamento.value.comparando = true
     processamento.value.mensagem = 'Comparando características faciais...'
 
-    // Comunicação com o seu Backend Express
     const cpf = sessionStorage.getItem('cpf_atual')
     const resultado = await api.compararRosto(cpf, fotoCapturaBase64, descriptorCaptura)
 
@@ -303,8 +280,6 @@ const capturarEComparar = async () => {
 
     if (resultado.aprovado) {
       processamento.value.comparando = false
-
-      // Envia comando de liberação de acesso (Status Ativo)
       await api.autorizarPessoa(cpf)
       processamento.value.completo = true
 
@@ -321,7 +296,6 @@ const capturarEComparar = async () => {
   } catch (err) {
     console.error('❌ Erro durante o processamento biométrico:', err)
     
-    // Garante o desligamento da câmera em caso de falha crítica interna
     if (stream) {
       stream.getTracks().forEach(t => t.stop())
       stream = null
@@ -371,12 +345,8 @@ const resetAlignment = () => {
 }
 
 const reiniciar = () => {
-  // Limpa loops anteriores preventivamente antes de remontar
   if (intervalId) clearInterval(intervalId)
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop())
-    stream = null
-  }
+  if (pollIntervalId) clearInterval(pollIntervalId)
 
   processamento.value.erro = false
   processamento.value.completo = false
@@ -385,12 +355,10 @@ const reiniciar = () => {
   processamento.value.capturado = false
   
   resetAlignment()
-  // Aciona o método de setup limpo
   inicializarSistema()
 }
 
 onUnmounted(() => {
-  if (stream) stream.getTracks().forEach(t => t.stop())
   if (intervalId) clearInterval(intervalId)
   if (pollIntervalId) clearInterval(pollIntervalId)
 })

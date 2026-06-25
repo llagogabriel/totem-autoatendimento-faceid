@@ -1,4 +1,5 @@
-import sqlite3 from 'sqlite3'
+import initSqlJs from 'sql.js'
+import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -7,39 +8,89 @@ const __dirname = path.dirname(__filename)
 
 const DB_PATH = process.env.DB_PATH || './database.db'
 
-const db = new sqlite3.Database(DB_PATH, (err) => {
-  if (err) {
+let db = null
+let SQL = null
+
+async function initDb() {
+  SQL = await initSqlJs()
+  
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      const data = fs.readFileSync(DB_PATH)
+      db = new SQL.Database(data)
+      console.log('✅ Conectado ao SQLite:', DB_PATH)
+    } else {
+      db = new SQL.Database()
+      console.log('✅ Novo banco de dados criado:', DB_PATH)
+      saveDb()
+    }
+  } catch (err) {
     console.error('❌ Erro ao conectar ao banco de dados:', err.message)
-  } else {
-    console.log('✅ Conectado ao SQLite:', DB_PATH)
+    throw err
   }
-})
+}
+
+function saveDb() {
+  try {
+    const data = db.export()
+    const buffer = Buffer.from(data)
+    fs.writeFileSync(DB_PATH, buffer)
+  } catch (err) {
+    console.error('❌ Erro ao salvar banco de dados:', err.message)
+  }
+}
 
 // Executar com Promise
 export function dbRun(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function(err) {
-      if (err) reject(err)
-      else resolve({ id: this.lastID, changes: this.changes })
-    })
+  return Promise.resolve().then(() => {
+    try {
+      db.run(sql, params)
+      saveDb()
+      return { id: null, changes: db.getRowsModified() }
+    } catch (err) {
+      throw err
+    }
   })
 }
 
 export function dbGet(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err)
-      else resolve(row)
-    })
+  return Promise.resolve().then(() => {
+    try {
+      const result = db.exec(sql, params)
+      if (result.length > 0 && result[0].values.length > 0) {
+        const columns = result[0].columns
+        const values = result[0].values[0]
+        const row = {}
+        columns.forEach((col, idx) => {
+          row[col] = values[idx]
+        })
+        return row
+      }
+      return undefined
+    } catch (err) {
+      throw err
+    }
   })
 }
 
 export function dbAll(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
+  return Promise.resolve().then(() => {
+    try {
+      const result = db.exec(sql, params)
+      if (result.length > 0) {
+        const columns = result[0].columns
+        return result[0].values.map(values => {
+          const row = {}
+          columns.forEach((col, idx) => {
+            row[col] = values[idx]
+          })
+          return row
+        })
+      }
+      return []
+    } catch (err) {
+      throw err
+    }
   })
 }
 
@@ -103,4 +154,5 @@ export async function initializeDatabase() {
   }
 }
 
+export { initDb }
 export default db
