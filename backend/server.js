@@ -60,7 +60,7 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`\n🚀 Servidor rodando em http://localhost:${PORT}`)
       console.log(`📍 CORS permitido para: ${rawCorsOrigin || '* (todos)'}`)
-      console.log(`📊 Threshold de similaridade: ${process.env.SIMILARITY_THRESHOLD || 99}%`)
+      console.log(`📊 Threshold de similaridade: ${process.env.SIMILARITY_THRESHOLD || 70}%`)
       console.log('\n💡 Endpoints disponíveis:')
       console.log('   GET  /api/saude')
       console.log('   GET  /api/pessoas/:cpf')
