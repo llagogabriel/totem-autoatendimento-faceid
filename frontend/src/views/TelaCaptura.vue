@@ -205,9 +205,10 @@ const iniciarDeteccao = () => {
     try {
       if (!image.naturalWidth || !image.naturalHeight) return
 
+
       const detection = await faceapi.detectSingleFace(
         image,
-        new faceapi.TinyFaceDetectorOptions()
+        new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }) // ALTERADO: Modelo preciso para rostos distantes
       )
 
       const context = canvas.getContext('2d')
@@ -230,7 +231,7 @@ const iniciarDeteccao = () => {
       console.error('Erro na detecção contínua:', err)
       resetAlignment()
     }
-  }, 200)
+  }, 350)
 }
 
 const capturarEComparar = async () => {
@@ -241,10 +242,11 @@ const capturarEComparar = async () => {
   try {
     clearInterval(intervalId)
 
+ 
     const image = imageRef.value
 
     const detection = await faceapi
-      .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
+      .detectSingleFace(image, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })) // ALTERADO aqui também!
       .withFaceLandmarks()
       .withFaceDescriptor()
 
