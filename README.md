@@ -2,6 +2,12 @@
 
 Sistema profissional de reconhecimento de pessoas e autorização de acesso usando visão computacional e comparação biométrica.
 
+## Especificação do Projeto
+
+## Validação do Projeto
+
+(validacao.md)
+
 ## 🏗️ Arquitetura
 
 ```
@@ -49,12 +55,12 @@ Sistema profissional de reconhecimento de pessoas e autorização de acesso usan
    └─ Backend compara com foto registrada
       ↓
 4. RESULTADO
-   ├─ Se similaridade > 99%
+   ├─ Se similaridade >= 70%
    │  ├─ Aprova ✅
    │  ├─ Autoriza acesso (status='ativo')
    │  └─ Redireciona após 3s
    │
-   └─ Se similaridade < 99%
+   └─ Se similaridade < 70%
       ├─ Rejeita ❌
       └─ Oferece opção de tentar novamente
 ```
@@ -147,7 +153,7 @@ O sistema utiliza **Hash Perceptual (pHash)**:
 5. **Compara** padrões entre duas imagens
 6. **Retorna** percentual de similaridade (0-100%)
 
-**Threshold (Limiar):** 99%
+**Threshold (Limiar):** 70%
 - Padrão da indústria comercial
 - Configurável em `backend/.env`
 
@@ -261,9 +267,6 @@ totem-acesso/
 - [ ] Backup automático
 - [ ] Cache de embeddings
 
-## 📝 Licença
-
-Desenvolvido para sistema de acesso biométrico.
 
 ---
 
