@@ -4,11 +4,11 @@ Sistema profissional de reconhecimento de pessoas e autorização de acesso usan
 
 ## Especificação do Projeto
 
-[Documentação de Especificação](ProjetoVisaoComputacional.docx).
+[Documentação de Especificação](/ProjetoVisaoComputacional.docx).
 
 ## Validação do Projeto
 
-[Documentação da Validação](validacao.md)
+[Documentação da Validação](../validacao.md)
 
 ## 🏗️ Arquitetura
 
