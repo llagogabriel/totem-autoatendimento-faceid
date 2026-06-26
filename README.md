@@ -75,7 +75,7 @@ Sistema profissional de reconhecimento de pessoas e autorização de acesso usan
 - npm ou yarn
 - Câmera conectada
 
-Branch: implementacao-lab -> sistema que roda utilizando a câmera do laboratório.
+Branch: implementacao-lab -> sistema que roda utilizando a câmera do laboratório. <br>
 Branch: implementacao-webcam -> sistema que roda utilizando a webcam do notebook/desktop.
 
 ### 1️⃣ Instalar Backend
