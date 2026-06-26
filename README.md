@@ -77,6 +77,9 @@ Sistema profissional de reconhecimento de pessoas e autorização de acesso usan
 
 ### 1️⃣ Instalar Backend
 
+Branch: implementacao-lab -> sistema que roda utilizando a câmera do laboratório.
+Branch: implementacao-webcam -> sistema que roda utilizando a webcam do notebook/desktop.
+
 ```bash
 cd backend
 npm install
