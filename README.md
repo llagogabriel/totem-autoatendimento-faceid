@@ -8,7 +8,7 @@ Sistema profissional de reconhecimento de pessoas e autorização de acesso usan
 
 ## Validação do Projeto
 
-[Documentação da Validação](../validacao.md)
+[Documentação da Validação](/validacao.md)
 
 ## 🏗️ Arquitetura
 
