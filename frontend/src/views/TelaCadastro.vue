@@ -41,7 +41,7 @@
           </div>
 
           <div class="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-inner">
-            <img ref="cameraImg" alt="camera preview" class="h-full w-full object-cover" />
+            <img ref="cameraImg" alt="camera preview" class="h-full w-full object-cover scale-[1.3] origin-center" />
             <canvas ref="cameraCanvas" class="hidden"></canvas>
             
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -161,10 +161,8 @@ const openCamera = async () => {
     if (!img) throw new Error('Elemento de imagem não encontrado')
 
     console.log('📷 Conectando a Tela de Cadastro ao fluxo fluido RTSP...')
-    
     try { img.crossOrigin = 'anonymous' } catch (e) {}
     
-    // Aponta o elemento diretamente para o nosso stream contínuo do service de API
     img.src = api.obterUrlStream()
 
   } catch (err) {
@@ -182,7 +180,7 @@ const closeCamera = () => {
   }
 }
 
-// --- Captura de Foto a partir do Stream ---
+// --- Captura de Foto a partir do Stream com Zoom Simulado ---
 const captureFromCamera = () => {
   if (!cameraImg.value || !cameraCanvas.value) {
     mensagemTipo.value = 'erro'
@@ -192,18 +190,28 @@ const captureFromCamera = () => {
   const img = cameraImg.value
   const canvas = cameraCanvas.value
   
-  // Utiliza as dimensões nativas da imagem recebida do FFmpeg
-  canvas.width = img.naturalWidth || 1280
-  canvas.height = img.naturalHeight || 720
+  const baseWidth = img.naturalWidth || 1920
+  const baseHeight = img.naturalHeight || 1080
+  
+  canvas.width = baseWidth
+  canvas.height = baseHeight
   
   const ctx = canvas.getContext('2d')
-  // Desenhando o quadro limpo direto do stream contínuo
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+  
+  // Simula matematicamente o mesmo zoom scale-[1.3] do CSS na captura da foto
+  const zoomFactor = 1.3
+  const sw = baseWidth / zoomFactor
+  const sh = baseHeight / zoomFactor
+  const sx = (baseWidth - sw) / 2
+  const sy = (baseHeight - sh) / 2
+  
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, baseWidth, baseHeight)
   
   preview.value = canvas.toDataURL('image/jpeg', 0.95)
   closeCamera()
 }
 
+// --- Processamento de IA e Envio para o Backend ---
 // --- Processamento de IA e Envio para o Backend ---
 async function extractFaceDescriptor(imageDataUrl) {
   const image = new Image()
@@ -214,9 +222,10 @@ async function extractFaceDescriptor(imageDataUrl) {
     image.onerror = reject
   })
 
+  // CORREÇÃO: Removemos o "true" de dentro de withFaceLandmarks()
   const detection = await faceapi
-    .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
-    .withFaceLandmarks()
+    .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.3 }))
+    .withFaceLandmarks() // <-- Deixe vazio para carregar o modelo de landmarks correto
     .withFaceDescriptor()
 
   if (!detection || !detection.descriptor) {

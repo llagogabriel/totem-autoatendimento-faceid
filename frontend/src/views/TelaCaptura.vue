@@ -4,17 +4,19 @@
       Validação Biométrica
     </h1>
     
-<div class="relative w-full max-w-2xl aspect-video bg-black rounded-3xl overflow-hidden border-4 border-blue-600 shadow-2xl shadow-blue-500/20">
+    <div class="relative w-full max-w-2xl aspect-video bg-black rounded-3xl overflow-hidden border-4 border-blue-600 shadow-2xl shadow-blue-500/20">
+      
       <img
         v-show="!processamento.completo && !processamento.erro"
         ref="imageRef"
         alt="camera preview"
-        class="w-full h-full object-cover select-none pointer-events-none"
+        class="w-full h-full object-cover select-none pointer-events-none scale-[1.3] origin-center"
       />
+
       <canvas 
         v-show="!processamento.completo && !processamento.erro"
         ref="canvasRef" 
-        class="absolute inset-0 w-full h-full pointer-events-none"
+        class="absolute inset-0 w-full h-full pointer-events-none scale-[1.3] origin-center"
       ></canvas>
 
       <div v-if="!processamento.completo && !processamento.erro" class="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -115,8 +117,8 @@ const processamento = ref({
 })
 
 const ALINHAMENTO_MIN_MS = 3000
-const ALINHAMENTO_TOLERANCE_X = 0.30
-const ALINHAMENTO_TOLERANCE_Y = 0.10
+const ALINHAMENTO_TOLERANCE_X = 0.25 
+const ALINHAMENTO_TOLERANCE_Y = 0.20 
 let stream = null
 let intervalId = null
 let pollIntervalId = null
@@ -152,7 +154,8 @@ const inicializarSistema = async () => {
     const MODEL_URL = '/models'
     
     if (!modelosCarregadosGlobal) {
-      console.log('📦 Carregando modelos da face-api.js...')
+      console.log('📦 Carregando modelos estáveis da face-api.js...')
+      // Carrega estritamente o detector Tiny para evitar requisições fantasmas
       await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL)
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
@@ -165,18 +168,14 @@ const inicializarSistema = async () => {
 
     try { img.crossOrigin = 'anonymous'; } catch (e) {}
 
-    // 1. Aponta diretamente para a rota de stream contínuo
     img.src = api.obterUrlStream()
 
-    // 2. CORREÇÃO CRÍTICA: Não esperamos mais o onload infinito do MJPEG.
-    // Damos um pequeno delay de 500ms para a conexão com o FFmpeg se estabilizar 
-    // e já liberamos a IA para começar a varredura biométrica na tela.
     setTimeout(() => {
       if (processamento.value.inicializando) {
         processamento.value.inicializando = false
         iniciarDeteccao()
       }
-    }, 500)
+    }, 1000)
 
   } catch (err) {
     console.error('❌ Erro ao inicializar:', err)
@@ -196,7 +195,11 @@ const iniciarDeteccao = () => {
   const canvas = canvasRef.value
   if (!image || !canvas) return
 
-  const displaySize = { width: image.naturalWidth || 1280, height: image.naturalHeight || 720 }
+  // MATEMÁTICA DO CANVAS AJUSTADA COM FATOR DE ZOOM (1.3x)
+  const displaySize = { 
+    width: (image.offsetWidth || 640) * 1.3, 
+    height: (image.offsetHeight || 360) * 1.3 
+  }
   faceapi.matchDimensions(canvas, displaySize)
 
   intervalId = setInterval(async () => {
@@ -205,10 +208,10 @@ const iniciarDeteccao = () => {
     try {
       if (!image.naturalWidth || !image.naturalHeight) return
 
-
+      // Força o uso estrito do Tiny com resolução de entrada estendida (608)
       const detection = await faceapi.detectSingleFace(
         image,
-        new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }) // ALTERADO: Modelo preciso para rostos distantes
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.3 })
       )
 
       const context = canvas.getContext('2d')
@@ -242,12 +245,13 @@ const capturarEComparar = async () => {
   try {
     clearInterval(intervalId)
 
- 
     const image = imageRef.value
 
+    // CORREÇÃO CIRÚRGICA: Tiramos o 'true' de dentro do withFaceLandmarks()
+    // Agora ele vai usar o modelo estável de 68 pontos sem quebrar a Promise!
     const detection = await faceapi
-      .detectSingleFace(image, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })) // ALTERADO aqui também!
-      .withFaceLandmarks()
+      .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.3 }))
+      .withFaceLandmarks() // <-- DEIXAR VAZIO ASSIM
       .withFaceDescriptor()
 
     if (!detection || !detection.descriptor) {
@@ -256,12 +260,24 @@ const capturarEComparar = async () => {
 
     const descriptorCaptura = Array.from(detection.descriptor)
 
+    // O resto do processo de geração do Canvas com zoom continua igual...
     const captureCanvas = document.createElement('canvas')
-    captureCanvas.width = image.naturalWidth || 1280
-    captureCanvas.height = image.naturalHeight || 720
+    const baseWidth = image.naturalWidth || 1920
+    const baseHeight = image.naturalHeight || 1080
+    
+    captureCanvas.width = baseWidth
+    captureCanvas.height = baseHeight
+    
     const captureCtx = captureCanvas.getContext('2d')
-    captureCtx.drawImage(image, 0, 0, captureCanvas.width, captureCanvas.height)
-    fotoCapturaBase64 = captureCanvas.toDataURL('image/jpeg')
+    
+    const zoomFactor = 1.3
+    const sw = baseWidth / zoomFactor
+    const sh = baseHeight / zoomFactor
+    const sx = (baseWidth - sw) / 2
+    const sy = (baseHeight - sh) / 2
+    
+    captureCtx.drawImage(image, sx, sy, sw, sh, 0, 0, baseWidth, baseHeight)
+    fotoCapturaBase64 = captureCanvas.toDataURL('image/jpeg', 0.95)
 
     processamento.value.capturado = true
     processamento.value.capturadoMensagem = 'Capturado com sucesso'
