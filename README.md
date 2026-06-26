@@ -88,10 +88,8 @@ npm install
 npm run seed
 ```
 
-Isso cria 3 pessoas:
-- `123.456.789-00` - GABRIEL ALVES DE OLIVEIRA
-- `987.654.321-00` - ANA SILVA SANTOS  
-- `111.222.333-44` - CARLOS PEREIRA COSTA
+Isso cadastra 30 pessoas aleatórias no banco de dados.
+
 
 ### 3️⃣ Iniciar Backend
 
