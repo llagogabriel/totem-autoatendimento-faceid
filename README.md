@@ -12,7 +12,7 @@ Sistema profissional de reconhecimento de pessoas e autorização de acesso usan
 
 ## Apresentação
 
-Link para o vídeo de apresentação no Youtube: [![Assista ao vídeo](https://img.youtube.com/vi/Sg-LKUHY1Uw/0.jpg)](https://youtu.be/Sg-LKUHY1Uw)
+[![Assista ao vídeo](https://img.youtube.com/vi/Sg-LKUHY1Uw/0.jpg)](https://youtu.be/Sg-LKUHY1Uw)
 
 ## 🏗️ Arquitetura
 
