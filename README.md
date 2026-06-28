@@ -10,6 +10,10 @@ Sistema profissional de reconhecimento de pessoas e autorização de acesso usan
 
 [Documentação da Validação](/validacao.md)
 
+## Apresentação
+
+Link para o vídeo de apresentação no Youtube: [![Assista ao vídeo](https://img.youtube.com/vi/Sg-LKUHY1Uw/0.jpg)](https://youtu.be/Sg-LKUHY1Uw)
+
 ## 🏗️ Arquitetura
 
 ```
